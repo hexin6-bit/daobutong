@@ -1,0 +1,82 @@
+[gd_scene load_steps=2 format=3 uid="uid://dao_card"]
+
+[ext_resource type="Script" path="res://scripts/card.gd" id="1_card"]
+
+[node name="Card" type="TextureRect"]
+custom_minimum_size = Vector2(200, 280)
+offset_right = 200.0
+offset_bottom = 280.0
+pivot_offset = Vector2(100, 140)
+mouse_filter = 2
+script = ExtResource("1_card")
+
+[node name="Glow" type="ColorRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -2.0
+offset_top = -2.0
+offset_right = 2.0
+offset_bottom = 2.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.941176, 0.752941, 0.25098, 0.28)
+
+[node name="Back" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="BackGlyph" type="Label" parent="Back"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.941176, 0.752941, 0.25098, 0.72)
+theme_override_font_sizes/font_size = 72
+text = "道"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Face" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="FaceLabel" type="Label" parent="Face"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 18.0
+offset_right = -16.0
+offset_bottom = -18.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.2, 0.141176, 0.0941176, 1)
+theme_override_font_sizes/font_size = 20
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="QualityBurst" type="CPUParticles2D" parent="."]
+position = Vector2(100, 140)
+emitting = false
