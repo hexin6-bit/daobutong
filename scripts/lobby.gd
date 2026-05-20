@@ -78,10 +78,14 @@ func _on_player_connected(peer_id: int) -> void:
 	transitioning = true
 	if NetworkManager.is_host:
 		GameManager.player_a.peer_id = 1
+		GameManager.player_a.player_name = GameManager.local_player_name
+		GameManager.player_a.sect = GameManager.local_player_sect
 		GameManager.player_b.peer_id = peer_id
 	else:
 		GameManager.player_a.peer_id = 1
 		GameManager.player_b.peer_id = multiplayer.get_unique_id()
+		GameManager.player_b.player_name = GameManager.local_player_name
+		GameManager.player_b.sect = GameManager.local_player_sect
 
 	GameManager.change_state(GameManager.GameState.STAT_ALLOCATION)
 	GameManager.transition_to_scene("res://scenes/stat_alloc.tscn")

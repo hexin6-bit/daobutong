@@ -249,6 +249,12 @@ func _on_choice(choice: String) -> void:
 func _on_tribulation_settled(result: Dictionary) -> void:
 	var message: String = str(result.get("message", "天劫结算完成"))
 	label_result.text = message + "\n突破者选择：" + str(result.get("breakthrough_choice", "-")) + "，另一方选择：" + str(result.get("other_choice", "-"))
+	if bool(result.get("failed", false)):
+		_spawn_tribulation_cut_in("突破失败", "雷火过身，境界未开。", Color("#ff3030"))
+		UIEffects.screen_shake(self, 8.0, 0.35)
+	elif bool(result.get("success", false)):
+		_spawn_tribulation_cut_in("渡劫成功", "天门开了一线。", Color("#f0c040"))
+		UIEffects.screen_shake(self, 5.0, 0.22)
 	_update_hp_feedback()
 
 
@@ -289,6 +295,42 @@ func _flash_red_screen() -> void:
 	var tween := create_tween()
 	tween.tween_property(red_flash, "color", Color(1.0, 0.0, 0.0, 0.3), 0.08)
 	tween.tween_property(red_flash, "color", Color(1.0, 0.0, 0.0, 0.0), 0.24)
+
+
+func _spawn_tribulation_cut_in(title: String, line: String, color: Color) -> void:
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.z_index = 300
+	box.custom_minimum_size = Vector2(620.0, 130.0)
+	add_child(box)
+
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_font_size_override("font_size", 54)
+	title_label.add_theme_color_override("font_color", color)
+	box.add_child(title_label)
+
+	var line_label := Label.new()
+	line_label.text = line
+	line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	line_label.add_theme_font_size_override("font_size", 25)
+	line_label.add_theme_color_override("font_color", Color("#e0d5b7"))
+	box.add_child(line_label)
+
+	box.global_position = get_viewport_rect().size * 0.5 - Vector2(310.0, 150.0)
+	box.scale = Vector2(0.86, 0.86)
+	box.modulate.a = 0.0
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_BACK)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(box, "scale", Vector2.ONE, 0.18)
+	tween.tween_property(box, "modulate:a", 1.0, 0.18)
+	tween.chain().tween_interval(0.8)
+	tween.chain().tween_property(box, "global_position", box.global_position + Vector2(0.0, -52.0), 0.38)
+	tween.parallel().tween_property(box, "modulate:a", 0.0, 0.38)
+	tween.tween_callback(box.queue_free)
 
 
 func _get_my_player() -> PlayerData:

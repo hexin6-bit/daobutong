@@ -34,6 +34,8 @@ func _ready() -> void:
 	_build_ui()
 	UIEffects.apply_button_press_tween(self)
 	_randomize_all()
+	if GameManager.single_player_mode:
+		status_label.text = GameManager.player_b.player_name + "已在山门外等你。"
 
 
 func _build_ui() -> void:
@@ -287,10 +289,18 @@ func _on_confirm_pressed() -> void:
 	confirm_button.disabled = true
 	status_label.text = "已确认，等待对方..."
 
-	var player := GameManager.player_a if NetworkManager.is_host else GameManager.player_b
+	var player: PlayerData = GameManager.player_a if GameManager.single_player_mode or NetworkManager.is_host else GameManager.player_b
+	player.player_name = GameManager.local_player_name
+	player.sect = ""
 	_apply_data_to_player(player, current_stats, current_hour_bonus, _current_bazi_data())
 
+	if GameManager.single_player_mode:
+		status_label.text = GameManager.player_b.player_name + "点头同行，正在入局..."
+		GameManager.start_game_main_if_stats_ready()
+		return
+
 	NetworkManager.send_message("stat_allocation", {
+		"player_name": player.player_name,
 		"stats": current_stats,
 		"hour_bonus": current_hour_bonus,
 	})

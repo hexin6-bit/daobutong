@@ -20,6 +20,7 @@ func _ready() -> void:
 
 
 func start_host(port: int = 4242) -> void:
+	stop_network()
 	peer = ENetMultiplayerPeer.new()
 	var error := peer.create_server(port, 1)
 	if error != OK:
@@ -29,12 +30,15 @@ func start_host(port: int = 4242) -> void:
 	is_host = true
 	connected = true
 	multiplayer.multiplayer_peer = peer
-	multiplayer.peer_connected.connect(_on_peer_connected)
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	if not multiplayer.peer_connected.is_connected(_on_peer_connected):
+		multiplayer.peer_connected.connect(_on_peer_connected)
+	if not multiplayer.peer_disconnected.is_connected(_on_peer_disconnected):
+		multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	connection_success.emit()
 
 
 func join_host(ip: String, port: int = 4242) -> void:
+	stop_network()
 	peer = ENetMultiplayerPeer.new()
 	var error := peer.create_client(ip, port)
 	if error != OK:
@@ -43,13 +47,27 @@ func join_host(ip: String, port: int = 4242) -> void:
 
 	is_host = false
 	multiplayer.multiplayer_peer = peer
-	multiplayer.connected_to_server.connect(_on_connected_to_server)
-	multiplayer.connection_failed.connect(_on_connection_failed)
+	if not multiplayer.connected_to_server.is_connected(_on_connected_to_server):
+		multiplayer.connected_to_server.connect(_on_connected_to_server)
+	if not multiplayer.connection_failed.is_connected(_on_connection_failed):
+		multiplayer.connection_failed.connect(_on_connection_failed)
 
 
 func send_message(msg_type: String, data: Dictionary = {}) -> void:
+	if multiplayer.multiplayer_peer == null:
+		message_received.emit(msg_type, data)
+		return
 	var packet := {"msg_type": msg_type, "data": data}
 	_receive_message.rpc(JSON.stringify(packet))
+
+
+func stop_network() -> void:
+	if peer != null:
+		peer.close()
+	peer = null
+	multiplayer.multiplayer_peer = null
+	is_host = false
+	connected = false
 
 
 @rpc("any_peer", "reliable")
@@ -85,6 +103,10 @@ func _receive_message(msg: String) -> void:
 			GameManager.on_bargain_continue_received(multiplayer.get_remote_sender_id(), data)
 		elif msg_type == "bargain_settled":
 			GameManager.on_bargain_settled(data)
+		elif msg_type == "contest_started":
+			GameManager.on_contest_started(data)
+		elif msg_type == "contest_choice":
+			GameManager.on_contest_choice_received(multiplayer.get_remote_sender_id(), data)
 		elif msg_type == "backpack_action":
 			GameManager.on_backpack_action_received(multiplayer.get_remote_sender_id(), data)
 		elif msg_type == "backpack_updated":
@@ -99,6 +121,14 @@ func _receive_message(msg: String) -> void:
 			GameManager.on_auction_action_received(multiplayer.get_remote_sender_id(), data)
 		elif msg_type == "auction_ended":
 			GameManager.on_auction_ended(data)
+		elif msg_type == "rest_started":
+			GameManager.on_rest_started(data)
+		elif msg_type == "rest_confirm":
+			GameManager.on_rest_confirm_received(multiplayer.get_remote_sender_id(), data)
+		elif msg_type == "rest_updated":
+			GameManager.on_rest_updated(data)
+		elif msg_type == "save_sync":
+			GameManager.on_save_sync(data)
 		elif msg_type == "breakthrough_request":
 			GameManager.request_breakthrough(multiplayer.get_remote_sender_id())
 		elif msg_type == "breakthrough_feedback":
@@ -109,6 +139,8 @@ func _receive_message(msg: String) -> void:
 			GameManager.on_tribulation_result(data)
 		elif msg_type == "battle_action":
 			GameManager.settle_battle_action(multiplayer.get_remote_sender_id(), str(data.get("action", "")))
+		elif msg_type == "battle_continue":
+			GameManager.on_battle_continue_received(multiplayer.get_remote_sender_id(), data)
 		elif msg_type == "battle_update":
 			GameManager.on_battle_update(data)
 		elif msg_type == "battle_end":
@@ -125,6 +157,8 @@ func _receive_message(msg: String) -> void:
 			GameManager.on_duel_final_choice_received(multiplayer.get_remote_sender_id(), data)
 		elif msg_type == "duel_final_choice_result":
 			GameManager.on_duel_final_choice_result(data)
+		elif msg_type == "set_bonus_triggered":
+			GameManager.on_set_bonus_triggered(data)
 		message_received.emit(msg_type, data)
 
 

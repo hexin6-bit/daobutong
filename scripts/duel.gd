@@ -16,6 +16,8 @@ var label_a: Label
 var label_b: Label
 var hp_a: ProgressBar
 var hp_b: ProgressBar
+var technique_grid_a: GridContainer
+var technique_grid_b: GridContainer
 var label_result: Label
 var final_choice_box: VBoxContainer
 var final_choice_buttons: HBoxContainer
@@ -34,6 +36,8 @@ func _ready() -> void:
 	GameManager.duel_prepared.connect(_on_duel_data)
 	GameManager.duel_updated.connect(_on_duel_data)
 	GameManager.duel_finished.connect(_on_duel_finished)
+	if not NetworkManager.message_received.is_connected(_on_network_message):
+		NetworkManager.message_received.connect(_on_network_message)
 	if not GameManager.duel_data.is_empty():
 		_on_duel_data(GameManager.duel_data)
 	GameManager.start_duel_if_host()
@@ -59,12 +63,14 @@ func _build_ui() -> void:
 	root.add_child(mid)
 
 	panel_a = _make_panel()
-	label_a = _make_label("玩家A", 14, TEXT_COLOR)
+	label_a = _make_label(GameManager.player_a.player_name, 14, TEXT_COLOR)
 	hp_a = _make_hp_bar()
+	technique_grid_a = _make_technique_grid()
 	var box_a := VBoxContainer.new()
 	box_a.add_theme_constant_override("separation", 8)
 	box_a.add_child(label_a)
 	box_a.add_child(hp_a)
+	box_a.add_child(technique_grid_a)
 	panel_a.add_child(box_a)
 	mid.add_child(panel_a)
 
@@ -74,12 +80,14 @@ func _build_ui() -> void:
 	mid.add_child(vs)
 
 	panel_b = _make_panel()
-	label_b = _make_label("玩家B", 14, TEXT_COLOR)
+	label_b = _make_label(GameManager.player_b.player_name, 14, TEXT_COLOR)
 	hp_b = _make_hp_bar()
+	technique_grid_b = _make_technique_grid()
 	var box_b := VBoxContainer.new()
 	box_b.add_theme_constant_override("separation", 8)
 	box_b.add_child(label_b)
 	box_b.add_child(hp_b)
+	box_b.add_child(technique_grid_b)
 	panel_b.add_child(box_b)
 	mid.add_child(panel_b)
 
@@ -180,7 +188,65 @@ func _make_hp_bar() -> ProgressBar:
 	var bar := ProgressBar.new()
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(1, 24)
+	bar.min_value = 0.0
+	bar.max_value = 100.0
+	bar.value = 100.0
+
+	var background_style := StyleBoxFlat.new()
+	background_style.bg_color = Color("#151420")
+	background_style.border_width_left = 1
+	background_style.border_width_top = 1
+	background_style.border_width_right = 1
+	background_style.border_width_bottom = 1
+	background_style.border_color = Color("#f0c040")
+	background_style.corner_radius_top_left = 7
+	background_style.corner_radius_top_right = 7
+	background_style.corner_radius_bottom_left = 7
+	background_style.corner_radius_bottom_right = 7
+	bar.add_theme_stylebox_override("background", background_style)
+
+	var fill_style := StyleBoxFlat.new()
+	fill_style.bg_color = Color("#c04040")
+	fill_style.corner_radius_top_left = 7
+	fill_style.corner_radius_top_right = 7
+	fill_style.corner_radius_bottom_left = 7
+	fill_style.corner_radius_bottom_right = 7
+	bar.add_theme_stylebox_override("fill", fill_style)
 	return bar
+
+
+func _make_technique_grid() -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	return grid
+
+
+func _make_duel_technique_card(text: String, filled: bool) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(128, 68)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#f5e6c8") if filled else Color(0.08, 0.08, 0.16, 0.85)
+	style.border_color = GOLD_COLOR if filled else Color("#3a3a6e")
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 6
+	style.content_margin_top = 4
+	style.content_margin_right = 6
+	style.content_margin_bottom = 4
+	card.add_theme_stylebox_override("panel", style)
+
+	var label := _make_label(text, 13, Color("#2a2a2a") if filled else Color("#8a8070"), HORIZONTAL_ALIGNMENT_CENTER)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	card.add_child(label)
+	return card
 
 
 func _on_action_pressed() -> void:
@@ -202,10 +268,52 @@ func _on_final_choice_pressed(choice: String) -> void:
 	label_result.text = message
 	label_log.text += "\n" + message
 	_scroll_log_to_bottom()
+	_play_final_choice_banner(choice, false)
 	if NetworkManager.is_host:
 		GameManager.on_duel_final_choice_received(1, {"choice": choice})
 	else:
 		NetworkManager.send_message("duel_final_choice", {"choice": choice})
+
+
+func _on_network_message(msg_type: String, data: Dictionary) -> void:
+	if msg_type == "duel_final_choice_result":
+		_show_final_choice_result(data)
+
+
+func _show_final_choice_result(data: Dictionary) -> void:
+	var local_peer_id: int = 1 if NetworkManager.is_host else multiplayer.get_unique_id()
+	var ascender_peer_id: int = int(data.get("ascender_peer_id", 0))
+	var choice: String = str(data.get("choice", "ascend"))
+	if choice == "yield":
+		if local_peer_id == ascender_peer_id:
+			label_result.text = "对方让出仙位。\n你被亲手送入仙门。"
+			_spawn_final_banner("受让成仙", Color("#f0c040"), "他退了一步，把整座仙门推给了你。")
+			_flash_final_color(Color(1.0, 0.82, 0.20, 0.34))
+		else:
+			label_result.text = "你让出了仙位。\n最后一劫，成全了对方。"
+			_spawn_final_banner("让出仙位", Color("#80c080"), "最后一步，你没有踏过去。")
+			_flash_final_color(Color(0.35, 0.75, 0.55, 0.32))
+	else:
+		if local_peer_id == ascender_peer_id:
+			label_result.text = "你踏入仙门。\n仙位归你。"
+			_spawn_final_banner("踏入仙门", Color("#f0c040"), "这一门一关，身后皆是旧人。")
+			_flash_final_color(Color(1.0, 0.82, 0.20, 0.34))
+		else:
+			label_result.text = "对方踏入仙门。\n你止步门外。"
+			_spawn_final_banner("仙门相隔", Color("#c04040"), "你只差一步，却再也追不上了。")
+			_flash_final_color(Color(0.75, 0.12, 0.12, 0.32))
+	UIEffects.screen_shake(self, 6.0, 0.32)
+
+
+func _play_final_choice_banner(choice: String, from_result: bool) -> void:
+	if choice == "yield":
+		_spawn_final_banner("让出仙位", Color("#80c080"), "最后一步，你没有踏过去。")
+		_flash_final_color(Color(0.35, 0.75, 0.55, 0.28))
+	else:
+		_spawn_final_banner("踏入仙门", Color("#f0c040"), "这一门一关，身后皆是旧人。")
+		_flash_final_color(Color(1.0, 0.82, 0.20, 0.28))
+	if not from_result:
+		UIEffects.screen_shake(self, 5.0, 0.24)
 
 
 func _on_duel_data(data: Dictionary) -> void:
@@ -217,19 +325,27 @@ func _on_duel_data(data: Dictionary) -> void:
 
 	_update_panel(label_a, hp_a, GameManager.player_a.player_name, stats_a)
 	_update_panel(label_b, hp_b, GameManager.player_b.player_name, stats_b)
+	_update_duel_technique_grid(technique_grid_a, GameManager.player_a)
+	_update_duel_technique_grid(technique_grid_b, GameManager.player_b)
 	_highlight_first(str(data.get("current_attacker", data.get("first_attacker", "player_a"))))
 	label_round.text = "回合：" + str(int(data.get("round", 1)))
 
 	var logs: Array = data.get("log", []) as Array
 	label_log.text = "\n".join(logs)
 	_scroll_log_to_bottom()
+	var last_result: Dictionary = data.get("last_result", {}) as Dictionary
+	var was_crit: bool = bool(last_result.get("暴击", false))
+	var was_dodge: bool = bool(last_result.get("闪避", false))
+	if was_dodge and last_hp_a >= 0 and last_hp_b >= 0:
+		var dodge_panel: Control = panel_b if previous_attacker == "player_a" else panel_a
+		_spawn_float_text(dodge_panel, "闪避！", Color("#80e0ff"))
 
 	if last_hp_a >= 0 and hp_now_a < last_hp_a:
 		_play_attack_motion(previous_attacker)
-		_spawn_damage_number(panel_a, last_hp_a - hp_now_a)
+		_spawn_damage_number(panel_a, last_hp_a - hp_now_a, was_crit)
 	if last_hp_b >= 0 and hp_now_b < last_hp_b:
 		_play_attack_motion(previous_attacker)
-		_spawn_damage_number(panel_b, last_hp_b - hp_now_b)
+		_spawn_damage_number(panel_b, last_hp_b - hp_now_b, was_crit)
 
 	last_hp_a = hp_now_a
 	last_hp_b = hp_now_b
@@ -250,10 +366,38 @@ func _update_panel(label: Label, hp_bar: ProgressBar, player_name: String, stats
 	hp_bar.max_value = hp_max
 	var tween := create_tween()
 	tween.tween_property(hp_bar, "value", float(clampi(hp_now, 0, hp_max)), 0.18)
-	label.text = player_name + "\n攻击 " + str(stats.get("攻击力", 0)) + "  防御 " + str(stats.get("防御力", 0)) + "\n气血 " + str(hp_now) + "/" + str(hp_max) + "  速度 " + str(stats.get("速度", 0))
-	label.text += "\n\n功法：\n" + _format_techniques(player_name)
-	label.text += "\n\n真意：\n" + _format_names(stats.get("真意列表", []) as Array)
-	label.text += "\n\n联动：\n" + _format_names(stats.get("联动列表", []) as Array)
+	var treasure: Dictionary = stats.get("法宝", {}) as Dictionary
+	var treasure_text: String = "无"
+	if not treasure.is_empty():
+		treasure_text = str(treasure.get("name", "法宝"))
+		if bool(treasure.get("is_growth_sword", false)):
+			treasure_text += " " + str(int(treasure.get("growth_level", 1))) + "阶"
+	label.text = player_name + "｜" + str(stats.get("流派", "散修")) + "\n攻击 " + str(stats.get("攻击力", 0)) + "  防御 " + str(stats.get("防御力", 0)) + "\n气血 " + str(hp_now) + "/" + str(hp_max) + "  速度 " + str(stats.get("速度", 0))
+	label.text += "\n法宝：" + treasure_text
+	label.text += "\n构筑 " + str(int(stats.get("构筑层级", 0))) + "｜善 " + str(int(stats.get("善因", 0))) + "｜忍 " + str(int(stats.get("隐忍", 0))) + "｜魔 " + str(int(stats.get("因果", 0)))
+	if int(stats.get("鬼魂强度", 0)) > 0:
+		label.text += "｜鬼魂 " + str(int(stats.get("鬼魂强度", 0)))
+	if float(stats.get("炼体强度", 0.0)) > 0.0:
+		label.text += "｜炼体 " + str(int(round(float(stats.get("炼体强度", 0.0)))))
+	if float(stats.get("情修强度", 0.0)) > 0.0:
+		label.text += "｜情修 " + str(int(round(float(stats.get("情修强度", 0.0)))))
+	var links: Array = stats.get("联动列表", []) as Array
+	if not links.is_empty():
+		label.text += "\n\n联动：\n" + _format_names(links)
+
+
+func _update_duel_technique_grid(grid: GridContainer, player: PlayerData) -> void:
+	if grid == null or player == null:
+		return
+	for child in grid.get_children():
+		child.queue_free()
+	for i in range(GameManager.MAX_EQUIPPED_TECHNIQUES):
+		if i < player.techniques.size() and player.techniques[i] is Dictionary:
+			var technique: Dictionary = player.techniques[i] as Dictionary
+			var text: String = GameManager.quality_display_name(str(technique.get("quality", ""))) + "\n" + str(technique.get("name", "未知")) + "\n" + str(technique.get("technique_realm", "初窥"))
+			grid.add_child(_make_duel_technique_card(text, true))
+		else:
+			grid.add_child(_make_duel_technique_card("空", false))
 
 
 func _play_attack_motion(attacker_key: String) -> void:
@@ -267,14 +411,16 @@ func _play_attack_motion(attacker_key: String) -> void:
 	tween.tween_property(panel, "position", original_position, 0.16)
 
 
-func _spawn_damage_number(target_panel: Control, amount: int) -> void:
+func _spawn_damage_number(target_panel: Control, amount: int, crit: bool = false) -> void:
 	if amount <= 0:
 		return
 	var damage_label := Label.new()
-	damage_label.text = "-" + str(amount)
-	damage_label.add_theme_font_size_override("font_size", 30)
+	damage_label.text = ("暴击！\n" if crit else "") + "-" + str(amount)
+	damage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	damage_label.add_theme_font_size_override("font_size", 40 if crit else 30)
 	damage_label.add_theme_color_override("font_color", DAMAGE_COLOR)
 	damage_label.z_index = 200
+	damage_label.scale = Vector2(1.12, 1.12) if crit else Vector2.ONE
 	add_child(damage_label)
 	await get_tree().process_frame
 	var start_position := target_panel.global_position + target_panel.size * 0.5 - global_position - damage_label.size * 0.5
@@ -285,6 +431,84 @@ func _spawn_damage_number(target_panel: Control, amount: int) -> void:
 	tween.tween_property(damage_label, "modulate:a", 0.0, 0.6)
 	tween.set_parallel(false)
 	tween.tween_callback(damage_label.queue_free)
+
+
+func _spawn_float_text(target_panel: Control, text: String, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 38)
+	label.add_theme_color_override("font_color", color)
+	label.z_index = 210
+	add_child(label)
+	await get_tree().process_frame
+	var start_position := target_panel.global_position + target_panel.size * 0.5 - global_position - label.size * 0.5
+	label.position = start_position
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(label, "position", start_position + Vector2(0, -48), 0.52)
+	tween.tween_property(label, "modulate:a", 0.0, 0.52)
+	tween.set_parallel(false)
+	tween.tween_callback(label.queue_free)
+
+
+func _spawn_final_banner(text: String, color: Color, line: String = "") -> void:
+	var banner := Label.new()
+	banner.text = text
+	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	banner.add_theme_font_size_override("font_size", 56)
+	banner.add_theme_color_override("font_color", color)
+	banner.z_index = 400
+	banner.custom_minimum_size = Vector2(620.0, 110.0)
+	add_child(banner)
+	await get_tree().process_frame
+	banner.global_position = get_viewport_rect().size * 0.5 - Vector2(310.0, 150.0)
+	banner.scale = Vector2(0.82, 0.82)
+	banner.modulate.a = 0.0
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_BACK)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(banner, "scale", Vector2.ONE, 0.18)
+	tween.tween_property(banner, "modulate:a", 1.0, 0.18)
+	tween.chain().tween_interval(0.7)
+	tween.chain().tween_property(banner, "global_position", banner.global_position + Vector2(0.0, -56.0), 0.42)
+	tween.parallel().tween_property(banner, "modulate:a", 0.0, 0.42)
+	tween.tween_callback(banner.queue_free)
+
+	if line != "":
+		var line_label := Label.new()
+		line_label.text = line
+		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		line_label.add_theme_font_size_override("font_size", 24)
+		line_label.add_theme_color_override("font_color", TEXT_COLOR)
+		line_label.z_index = 401
+		line_label.custom_minimum_size = Vector2(660.0, 48.0)
+		add_child(line_label)
+		await get_tree().process_frame
+		line_label.global_position = banner.global_position + Vector2(-20.0, 88.0)
+		line_label.modulate.a = 0.0
+		var line_tween := create_tween()
+		line_tween.tween_property(line_label, "modulate:a", 1.0, 0.18)
+		line_tween.tween_interval(0.76)
+		line_tween.tween_property(line_label, "modulate:a", 0.0, 0.36)
+		line_tween.tween_callback(line_label.queue_free)
+
+
+func _flash_final_color(color: Color) -> void:
+	var flash := ColorRect.new()
+	flash.color = color
+	flash.modulate.a = 0.0
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.z_index = 380
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(flash)
+	var tween := create_tween()
+	tween.tween_property(flash, "modulate:a", 1.0, 0.08)
+	tween.tween_property(flash, "modulate:a", 0.0, 0.32)
+	tween.tween_callback(flash.queue_free)
 
 
 func _scroll_log_to_bottom() -> void:
@@ -300,7 +524,7 @@ func _format_techniques(player_name: String) -> String:
 	var names: Array[String] = []
 	for technique in player.techniques:
 		if technique is Dictionary:
-			names.append(str(technique.get("quality", "")) + "·" + str(technique.get("name", "")))
+			names.append(GameManager.quality_display_name(str(technique.get("quality", ""))) + "·" + str(technique.get("name", "")))
 	return "，".join(names)
 
 

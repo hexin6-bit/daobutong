@@ -6,7 +6,7 @@ const MOBILE_FONT_SCALE: float = 1.16
 const MOBILE_MIN_FONT_SIZE: int = 18
 const PHONE_SAFE_MARGIN_X: float = 34.0
 const PHONE_SAFE_MARGIN_TOP: float = 24.0
-const PHONE_SAFE_MARGIN_BOTTOM: float = 30.0
+const PHONE_SAFE_MARGIN_BOTTOM: float = 78.0
 
 
 static func add_background(parent: Node) -> void:
@@ -93,18 +93,24 @@ static func _connect_button(button: Button) -> void:
 
 	button.set_meta("dao_press_tween", true)
 	button.pivot_offset = button.size * 0.5
-	button.resized.connect(func() -> void:
+	var button_id: int = button.get_instance_id()
+	button.resized.connect(_on_button_resized.bind(button_id))
+	button.button_down.connect(_on_button_press_state.bind(button_id, Vector2(0.95, 0.95)))
+	button.button_up.connect(_on_button_press_state.bind(button_id, Vector2.ONE))
+	button.mouse_exited.connect(_on_button_press_state.bind(button_id, Vector2.ONE))
+
+
+static func _on_button_resized(button_id: int) -> void:
+	var button_object: Object = instance_from_id(button_id)
+	if button_object is Button:
+		var button: Button = button_object as Button
 		button.pivot_offset = button.size * 0.5
-	)
-	button.button_down.connect(func() -> void:
-		_tween_button(button, Vector2(0.95, 0.95))
-	)
-	button.button_up.connect(func() -> void:
-		_tween_button(button, Vector2.ONE)
-	)
-	button.mouse_exited.connect(func() -> void:
-		_tween_button(button, Vector2.ONE)
-	)
+
+
+static func _on_button_press_state(button_id: int, target_scale: Vector2) -> void:
+	var button_object: Object = instance_from_id(button_id)
+	if button_object is Button:
+		_tween_button(button_object as Button, target_scale)
 
 
 static func _tween_button(button: Button, target_scale: Vector2) -> void:
@@ -123,16 +129,34 @@ static func screen_shake(node: Node, intensity: float = 3.0, duration: float = 0
 	if not (node is Control or node is Node2D):
 		return
 
-	var original_position := Vector2.ZERO
 	if node is Control:
-		original_position = (node as Control).position
+		var control: Control = node as Control
+		if is_equal_approx(control.anchor_left, 0.0) and is_equal_approx(control.anchor_top, 0.0) and is_equal_approx(control.anchor_right, 1.0) and is_equal_approx(control.anchor_bottom, 1.0):
+			control.position = Vector2.ZERO
+			control.scale = Vector2.ONE
+			control.offset_left = 0.0
+			control.offset_top = 0.0
+			control.offset_right = 0.0
+			control.offset_bottom = 0.0
+		return
+
+	const ORIGINAL_META := "dao_screen_shake_original_position"
+	const TWEEN_META := "dao_screen_shake_tween"
+
+	var original_position: Vector2 = Vector2.ZERO
+	if node.has_meta(ORIGINAL_META):
+		original_position = node.get_meta(ORIGINAL_META) as Vector2
 	else:
 		original_position = (node as Node2D).position
+		node.set_meta(ORIGINAL_META, original_position)
+
+	(node as Node2D).position = original_position
 
 	var steps: int = maxi(2, int(duration / 0.04))
 	var step_time: float = duration / float(steps)
 	var tween: Tween = node.create_tween()
+	node.set_meta(TWEEN_META, tween)
 	for i in steps:
-		var offset := Vector2(randf_range(-intensity, intensity), randf_range(-intensity, intensity))
+		var offset: Vector2 = Vector2(randf_range(-intensity, intensity), randf_range(-intensity, intensity))
 		tween.tween_property(node, "position", original_position + offset, step_time)
 	tween.tween_property(node, "position", original_position, 0.04)

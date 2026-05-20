@@ -54,15 +54,20 @@ func _render_scroll(data: Dictionary) -> void:
 		_add_section(_make_label("卷轴散佚，未能载入生平。", 34, GOLD_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
 		return
 
-	var verdict := _make_label(str(data.get("verdict", "")), 34, GOLD_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
-	verdict.custom_minimum_size = Vector2(600, 150)
+	var verdict := _make_label(str(data.get("verdict", "")), 38, GOLD_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+	verdict.custom_minimum_size = Vector2(600, 170)
 	_add_section(verdict)
 
-	_add_map_section("卷一·凡躯", data.get("凡躯", {}) as Dictionary, INK_COLOR)
-	_add_map_section("卷二·机缘录", data.get("机缘录", {}) as Dictionary, GOLD_COLOR, ["best_ji_yuan", "techniques", "treasures"])
-	_add_map_section("卷三·灾厄簿", data.get("灾厄簿", {}) as Dictionary, CALAMITY_COLOR, ["worst_calamity", "total_taken", "kang_count", "tui_count"])
-	_add_map_section("卷四·天劫记", data.get("天劫记", {}) as Dictionary, INK_COLOR)
-	_add_map_section("卷五·对决录", data.get("对决录", {}) as Dictionary, INK_COLOR)
+	var story: Dictionary = data.get("故事", {}) as Dictionary
+	if story.is_empty():
+		_add_map_section("卷一·凡躯", data.get("凡躯", {}) as Dictionary, INK_COLOR)
+		_add_map_section("卷二·机缘录", data.get("机缘录", {}) as Dictionary, GOLD_COLOR, ["best_ji_yuan", "techniques", "treasures"])
+		_add_map_section("卷三·灾厄簿", data.get("灾厄簿", {}) as Dictionary, CALAMITY_COLOR, ["worst_calamity", "total_taken", "kang_count", "tui_count"])
+		_add_map_section("卷四·天劫记", data.get("天劫记", {}) as Dictionary, INK_COLOR)
+		_add_map_section("卷五·对决录", data.get("对决录", {}) as Dictionary, INK_COLOR)
+	else:
+		_add_story_section(story)
+		_add_compact_path_section(data)
 	_add_companion_section(data.get("红尘录", {}) as Dictionary)
 	_add_final_section(data.get("盖棺定论", {}) as Dictionary)
 
@@ -85,19 +90,54 @@ func _add_map_section(title: String, data: Dictionary, accent: Color, accent_key
 	_add_section(box)
 
 
+func _add_story_section(story: Dictionary) -> void:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 18)
+	box.add_child(_make_label("生平小传", 30, GOLD_COLOR))
+	var order: Array[String] = ["命起", "行路", "道途", "终局", "余声"]
+	for key in order:
+		if not story.has(key):
+			continue
+		box.add_child(_make_label(str(story[key]), 24, INK_COLOR))
+	_add_section(box)
+
+
+func _add_compact_path_section(data: Dictionary) -> void:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	box.add_child(_make_label("道途留痕", 28, GOLD_COLOR))
+
+	var ji_yuan: Dictionary = data.get("机缘录", {}) as Dictionary
+	var calamity: Dictionary = data.get("灾厄簿", {}) as Dictionary
+	var duel: Dictionary = data.get("对决录", {}) as Dictionary
+	var technique_text: String = _format_named_array(ji_yuan.get("techniques", []))
+	var treasure_text: String = _format_named_array(ji_yuan.get("treasures", []))
+	var sect_affix_text: String = _format_count_dictionary(ji_yuan.get("sect_affixes", {}))
+	var cultivation_affix_text: String = _format_count_dictionary(ji_yuan.get("cultivation_affixes", {}))
+	var final_blow: String = str(duel.get("final_blow", "最后一击湮没于天光之中。"))
+
+	box.add_child(_make_label("功法：" + technique_text, 22, GOLD_COLOR))
+	box.add_child(_make_label("法宝：" + treasure_text, 22, GOLD_COLOR))
+	box.add_child(_make_label("伙伴门派：" + sect_affix_text, 22, INK_COLOR))
+	box.add_child(_make_label("修词条：" + cultivation_affix_text, 22, INK_COLOR))
+	box.add_child(_make_label("最险灾厄：" + str(calamity.get("worst_calamity", "无")), 22, CALAMITY_COLOR))
+	box.add_child(_make_label("最后一击：" + final_blow, 22, INK_COLOR))
+	_add_section(box)
+
+
 func _add_companion_section(data: Dictionary) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	box.add_child(_make_label("卷六·红尘录", 26, GOLD_COLOR))
 	var companions: Array = data.get("companions", []) as Array
 	if companions.is_empty():
-		box.add_child(_make_label("无人同行。", 20, INK_COLOR))
+		box.add_child(_make_label("无人同行。", 22, INK_COLOR))
 	else:
 		for companion in companions:
 			if companion is Dictionary:
 				var c: Dictionary = companion
 				var text := str(c.get("name", "")) + "：" + str(c.get("fate", "")) + "\n[i]“" + str(c.get("last_words", "")) + "”[/i]"
-				box.add_child(_make_rich_label(text, 20, COMPANION_COLOR))
+				box.add_child(_make_rich_label(text, 22, COMPANION_COLOR))
 	_add_section(box)
 
 
@@ -105,8 +145,8 @@ func _add_final_section(data: Dictionary) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
 	box.add_child(_make_label("卷末·盖棺定论", 26, GOLD_COLOR))
-	box.add_child(_make_label(str(data.get("title", "天命客")), 42, GOLD_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
-	box.add_child(_make_label(str(data.get("opponent_summary", "")), 22, INK_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(_make_label(str(data.get("title", "天命客")), 46, GOLD_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(_make_label(str(data.get("opponent_summary", "")), 24, INK_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
 	_add_section(box)
 
 
@@ -139,6 +179,82 @@ func _make_rich_label(text: String, font_size: int, color: Color) -> RichTextLab
 	return label
 
 
+func _play_immortal_book() -> void:
+	var record: Dictionary = GameManager.ending_scroll_data.get("仙册", {}) as Dictionary
+	if record.is_empty():
+		return
+	var layer := Control.new()
+	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.z_index = 500
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(layer)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.0)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
+
+	var book := PanelContainer.new()
+	book.custom_minimum_size = Vector2(620, 430)
+	book.size = Vector2(620, 430)
+	book.pivot_offset = Vector2(310, 215)
+	book.position = Vector2((get_viewport_rect().size.x - 620.0) * 0.5, -480.0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#f6d46a")
+	style.border_color = GOLD_COLOR
+	style.border_width_left = 5
+	style.border_width_top = 5
+	style.border_width_right = 5
+	style.border_width_bottom = 5
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 30
+	style.content_margin_top = 26
+	style.content_margin_right = 30
+	style.content_margin_bottom = 26
+	book.add_theme_stylebox_override("panel", style)
+	layer.add_child(book)
+
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 10)
+	book.add_child(box)
+	box.add_child(_make_label("仙册登录", 38, Color("#7a4d00"), HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(_make_label(str(record.get("name", "无名")) + "｜" + str(record.get("sect", "散修")) + "·" + str(record.get("cultivation", "散修")) + "·" + str(record.get("identity", "散修")), 24, INK_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(_make_label("总抢 " + str(record.get("total_qiang", 0)) + "｜总让 " + str(record.get("total_rang", 0)), 22, INK_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(_make_label("最强功法：" + str(record.get("strongest_technique", "无")), 21, INK_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(_make_label("觉醒法宝：" + str(record.get("awakened_treasure", "无")), 21, INK_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(_make_label("生死之交：" + str(record.get("closest_companion", "无")), 21, INK_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(_make_label("最后一击：" + str(record.get("final_blow", "无")), 21, INK_COLOR, HORIZONTAL_ALIGNMENT_CENTER))
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(dim, "color", Color(0.0, 0.0, 0.0, 0.44), 0.22)
+	tween.tween_property(book, "position:y", get_viewport_rect().size.y * 0.5 - 215.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.chain().tween_interval(1.55)
+	tween.chain().tween_property(book, "scale", Vector2(0.08, 1.0), 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.chain().tween_property(book, "position:y", -520.0, 0.5).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.parallel().tween_property(book, "modulate:a", 0.0, 0.45)
+	tween.chain().tween_callback(_show_immortal_recorded_text.bind(layer, dim))
+
+
+func _show_immortal_recorded_text(layer: Control, dim: ColorRect) -> void:
+	var text_label := _make_label("仙册已录，万古流芳", 42, GOLD_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+	text_label.z_index = 520
+	text_label.custom_minimum_size = Vector2(700, 90)
+	layer.add_child(text_label)
+	text_label.position = Vector2((get_viewport_rect().size.x - 700.0) * 0.5, get_viewport_rect().size.y * 0.5 - 45.0)
+	text_label.modulate.a = 0.0
+	var tween := create_tween()
+	tween.tween_property(text_label, "modulate:a", 1.0, 0.22)
+	tween.tween_interval(1.0)
+	tween.tween_property(text_label, "modulate:a", 0.0, 0.45)
+	tween.parallel().tween_property(dim, "color", Color(0.0, 0.0, 0.0, 0.0), 0.45)
+	tween.tween_callback(layer.queue_free)
+
+
 func _style_restart_button(button: Button) -> void:
 	var style := StyleBoxFlat.new()
 	style.bg_color = PAPER_COLOR
@@ -154,6 +270,7 @@ func _style_restart_button(button: Button) -> void:
 	button.add_theme_stylebox_override("normal", style)
 	button.add_theme_stylebox_override("hover", style)
 	button.add_theme_color_override("font_color", INK_COLOR)
+	button.add_theme_font_size_override("font_size", 24)
 
 
 func _play_scroll_open() -> void:
@@ -172,6 +289,10 @@ func _play_reveal() -> void:
 		var tween := create_tween()
 		tween.tween_interval(float(i) * 0.3)
 		tween.tween_property(sections[i], "modulate:a", 1.0, 0.35)
+	await get_tree().create_timer(float(sections.size()) * 0.3 + 0.45).timeout
+	if bool(GameManager.ending_scroll_data.get("is_winner", false)):
+		GameManager.save_immortal_record_from_scroll(GameManager.ending_scroll_data)
+		_play_immortal_book()
 
 
 func _format_value(value: Variant) -> String:
@@ -199,8 +320,10 @@ func _format_value_for_key(key: String, value: Variant) -> String:
 			return _format_final_stats(value)
 		"tribulations":
 			return _format_tribulations(value)
-		"techniques", "treasures", "techniques_with_resonances":
+		"techniques", "treasures":
 			return _format_named_array(value)
+		"sect_affixes", "cultivation_affixes":
+			return _format_count_dictionary(value)
 		_:
 			return _format_value(value)
 
@@ -226,6 +349,18 @@ func _format_stat_dictionary(value: Variant) -> String:
 	return "，".join(parts) if not parts.is_empty() else "无"
 
 
+func _format_count_dictionary(value: Variant) -> String:
+	if not value is Dictionary:
+		return _format_value(value)
+	var data: Dictionary = value as Dictionary
+	if data.is_empty():
+		return "无"
+	var parts: Array[String] = []
+	for key in data.keys():
+		parts.append(str(key) + "×" + str(int(data[key])))
+	return "，".join(parts)
+
+
 func _format_final_stats(value: Variant) -> String:
 	if not value is Dictionary:
 		return _format_value(value)
@@ -238,13 +373,8 @@ func _format_final_stats(value: Variant) -> String:
 	if not core_parts.is_empty():
 		lines.append("属性：" + "，".join(core_parts))
 
-	var resonances: Array = stats.get("真意列表", []) as Array
 	var links: Array = stats.get("联动列表", []) as Array
 	var companions: Array = stats.get("伙伴列表", []) as Array
-	if not resonances.is_empty():
-		lines.append("真意：" + _format_named_array(resonances))
-	if not links.is_empty():
-		lines.append("联动：" + _format_named_array(links))
 	if not companions.is_empty():
 		lines.append("伙伴：" + _format_named_array(companions))
 	return "\n".join(lines) if not lines.is_empty() else "无"
@@ -289,15 +419,11 @@ func _format_named_dictionary(data: Dictionary) -> String:
 	if data.has("name"):
 		var text: String = str(data.get("name", ""))
 		if data.has("quality"):
-			text = str(data.get("quality", "")) + "·" + text
-		if data.has("resonances"):
-			var resonances: Array = data.get("resonances", []) as Array
-			if not resonances.is_empty():
-				text += "（真意：" + _format_named_array(resonances) + "）"
+			text = GameManager.quality_display_name(str(data.get("quality", ""))) + "·" + text
 		if data.has("active_links"):
 			var links: Array = data.get("active_links", []) as Array
 			if not links.is_empty():
-				text += "（联动：" + _format_named_array(links) + "）"
+				text += "（功法词条：" + _format_named_array(links) + "）"
 		return text
 	if data.has("desc"):
 		return str(data.get("desc", ""))
@@ -321,12 +447,13 @@ func _label_key(key: String) -> String:
 		"tribulations": "天劫记录",
 		"worst_tribulation": "最惨烈天劫",
 		"final_stats": "最终属性",
-		"techniques_with_resonances": "功法真意联动",
 		"key_rounds": "关键回合",
 		"final_blow": "最后一击",
 		"final_choice": "仙位抉择",
 		"techniques": "功法",
 		"treasures": "法宝",
+		"sect_affixes": "伙伴门派",
+		"cultivation_affixes": "修词条",
 	}
 	return str(names.get(key, key))
 

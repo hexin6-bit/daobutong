@@ -73,11 +73,11 @@ func _add_mountain(parent: Node, points: PackedVector2Array, alpha: float) -> vo
 func _build_particles() -> void:
 	var image: Image = Image.create(2, 2, false, Image.FORMAT_RGBA8)
 	image.fill(Color(1.0, 1.0, 1.0, 0.55))
-	var texture: ImageTexture = ImageTexture.create_from_image(image)
+	var particle_texture: ImageTexture = ImageTexture.create_from_image(image)
 
 	var particles: CPUParticles2D = CPUParticles2D.new()
 	particles.name = "AuraParticles"
-	particles.texture = texture
+	particles.texture = particle_texture
 	particles.amount = 28
 	particles.lifetime = 10.0
 	particles.preprocess = 10.0
