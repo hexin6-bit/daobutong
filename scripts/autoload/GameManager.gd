@@ -512,7 +512,57 @@ const TECHNIQUE_POOL := [
 	{"name": "百鬼成城", "quality": "合体级", "bonuses": {"攻击力": 0.32, "气血上限": 0.26, "吸血": 0.18}},
 	{"name": "红尘成仙", "quality": "合体级", "bonuses": {"攻击力": 0.30, "防御力": 0.24, "灵力获取": 0.24, "速度": 16}},
 	{"name": "云游手札", "quality": "金丹级", "bonuses": {"灵力获取": 0.15}},
+	{"name": "小还丹经", "quality": "筑基级", "bonuses": {"每轮回血": 0.03, "灵力获取": 0.06}},
+	{"name": "草木丹诀", "quality": "金丹级", "bonuses": {"灵力获取": 0.12, "每轮回血": 0.04}},
+	{"name": "青囊丹书", "quality": "元婴级", "bonuses": {"气血上限": 0.18, "每轮回血": 0.06}},
+	{"name": "九转丹典", "quality": "化神级", "bonuses": {"灵力获取": 0.22, "每轮回血": 0.08, "气血上限": 0.16}},
+	{"name": "太乙丹经", "quality": "合体级", "bonuses": {"灵力获取": 0.30, "每轮回血": 0.10, "气血上限": 0.24}},
+	{"name": "聚灵阵图", "quality": "筑基级", "bonuses": {"防御力": 0.08, "灵力获取": 0.05}},
+	{"name": "八卦阵解", "quality": "金丹级", "bonuses": {"防御力": 0.14, "战斗减伤": 0.05}},
+	{"name": "锁灵阵典", "quality": "元婴级", "bonuses": {"防御力": 0.20, "战斗减伤": 0.08}},
+	{"name": "周天星斗阵", "quality": "化神级", "bonuses": {"防御力": 0.26, "战斗减伤": 0.11, "灵力获取": 0.12}},
+	{"name": "万象归元阵", "quality": "合体级", "bonuses": {"防御力": 0.34, "战斗减伤": 0.14, "气血上限": 0.24}},
+	{"name": "轻身符诀", "quality": "筑基级", "bonuses": {"闪避率": 0.04, "速度": 5}},
+	{"name": "疾风符录", "quality": "金丹级", "bonuses": {"闪避率": 0.07, "速度": 12}},
+	{"name": "雷火符经", "quality": "元婴级", "bonuses": {"攻击力": 0.16, "暴击率": 0.08}},
+	{"name": "天遁符书", "quality": "化神级", "bonuses": {"闪避率": 0.12, "速度": 18, "破防": 0.08}},
+	{"name": "太虚万符录", "quality": "合体级", "bonuses": {"闪避率": 0.16, "速度": 26, "暴击率": 0.12}},
+	{"name": "锻器入门", "quality": "筑基级", "bonuses": {"攻击力": 0.07, "防御力": 0.05}},
+	{"name": "百炼器谱", "quality": "金丹级", "bonuses": {"攻击力": 0.12, "破防": 0.05}},
+	{"name": "玄铁器经", "quality": "元婴级", "bonuses": {"攻击力": 0.18, "防御力": 0.14, "破防": 0.07}},
+	{"name": "天工锻器录", "quality": "化神级", "bonuses": {"攻击力": 0.26, "暴击率": 0.10, "破防": 0.10}},
+	{"name": "造化器典", "quality": "合体级", "bonuses": {"攻击力": 0.36, "防御力": 0.24, "破防": 0.14}},
 ]
+
+const TECHNIQUE_CULTIVATION_OVERRIDES := {
+	"尸阴经": "丹修",
+	"黄泉引": "丹修",
+	"冥河真经": "丹修",
+	"牵丝步": "情修",
+	"欲海生莲": "情修",
+	"太虚步": "阵修",
+	"天罡正气": "阵修",
+	"玄龟息": "阵修",
+	"玄甲真诀": "阵修",
+	"金刚不坏": "阵修",
+	"阴兵借道": "阵修",
+	"魂幡万转": "阵修",
+	"惊鸿剑步": "符修",
+	"追风剑诀": "符修",
+	"雷霆万钧": "符修",
+	"天外飞剑": "符修",
+	"剑骨铮鸣": "符修",
+	"剑影分光": "符修",
+	"吸星大法": "器修",
+	"无回剑意": "器修",
+	"七杀剑经": "器修",
+	"青莲剑典": "器修",
+	"九转玄功": "器修",
+	"搬山劲": "器修",
+	"熊罴劲": "器修",
+	"力破万法": "剑修",
+	"蛮牛劲": "剑修",
+}
 
 const TREASURE_POOL := [
 	{"name": "旧皮甲", "quality": "炼气级", "school": "体修", "attack_name": "贴身硬撞", "battle_damage": 1, "duel_damage": 3, "battle_hurt_reduction": 0.04, "passive_bonus": {"气血上限": 0.04}, "use_effect": "入门护身法宝，略减伤"},
@@ -5575,22 +5625,24 @@ func _fixed_technique_cultivation_tag(item: Dictionary) -> String:
 	if explicit != "":
 		return explicit
 	var name: String = str(item.get("name", ""))
+	if TECHNIQUE_CULTIVATION_OVERRIDES.has(name):
+		return str(TECHNIQUE_CULTIVATION_OVERRIDES.get(name, ""))
 	if name.contains("鬼") or name.contains("魂") or name.contains("阴") or name.contains("黄泉") or name.contains("万魂"):
 		return "鬼修"
-	if name.contains("体") or name.contains("身") or name.contains("骨") or name.contains("金刚") or name.contains("不灭") or name.contains("玄甲") or name.contains("淬"):
-		return "体修"
 	if name.contains("剑") or name.contains("锋") or name.contains("斩") or name.contains("裂") or name.contains("霄"):
 		return "剑修"
 	if name.contains("红尘") or name.contains("同心") or name.contains("合欢") or name.contains("三生") or name.contains("情") or name.contains("桃花"):
 		return "情修"
-	if name.contains("丹") or name.contains("回春") or name.contains("吐纳") or name.contains("聚灵") or name.contains("青囊"):
-		return "丹修"
-	if name.contains("阵") or name.contains("罗盘") or name.contains("八卦"):
-		return "阵修"
 	if name.contains("符") or name.contains("令"):
 		return "符修"
+	if name.contains("阵") or name.contains("罗盘") or name.contains("八卦"):
+		return "阵修"
+	if name.contains("丹") or name.contains("回春") or name.contains("吐纳") or name.contains("青囊"):
+		return "丹修"
 	if name.contains("器") or name.contains("锻") or name.contains("炉"):
 		return "器修"
+	if name.contains("体") or name.contains("身") or name.contains("骨") or name.contains("金刚") or name.contains("不灭") or name.contains("玄甲") or name.contains("淬"):
+		return "体修"
 	var bonuses: Dictionary = item.get("base_bonuses", item.get("bonuses", {})) as Dictionary
 	if bonuses.has("吸血"):
 		return "鬼修"
