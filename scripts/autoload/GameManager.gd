@@ -309,14 +309,14 @@ const TREASURE_GROWTH := {
 	"器修": {"name": "器魂", "trigger": "法宝每涨5层+1，觉醒时+5"},
 }
 const CULTIVATION_BOND_DATA := {
-	"鬼修": {"name": "役鬼临阵", "desc": "2件开局役鬼护身，3件小鬼挡刀会反噬，4件护魂更厚，5件役鬼归一。", "mechanic": "小鬼挡刀并助攻", "bonuses": {"灵力获取": 0.06, "吸血": 0.04}},
-	"体修": {"name": "法相金身", "desc": "2件首次受重击显化法相，3件挡伤会反震，4件反震更猛，5件法相归一。", "mechanic": "重伤时法相变大减伤", "bonuses": {"气血上限": 0.08, "战斗减伤": 0.04, "反伤": 0.03}},
-	"剑修": {"name": "剑影追斩", "desc": "2件抢攻追加剑影，3件追斩更强，4件有机会万剑再斩，5件剑心归一。", "mechanic": "抢攻连斩", "bonuses": {"攻击力": 0.07, "暴击率": 0.06, "破防": 0.04}},
-	"情修": {"name": "红尘护心", "desc": "2件让机缘或承灾凝成护心，3件护心碎裂会回春，4件护心更厚，5件红尘归一。", "mechanic": "让与承劫转护心", "bonuses": {"防御力": 0.05, "灵力获取": 0.05, "每轮回血": 0.02}},
-	"丹修": {"name": "九转丹息", "desc": "2件濒危时丹气续命，3件续命后回血，4件丹息储量更高，5件九转归一。", "mechanic": "濒危自动续命", "bonuses": {"气血上限": 0.06, "每轮回血": 0.04, "灵力获取": 0.03}},
-	"阵修": {"name": "阵纹控场", "desc": "2件周旋铺阵纹减伤，3件阵纹更硬，4件阵纹绞杀，5件阵心归一。", "mechanic": "周旋布阵减伤", "bonuses": {"防御力": 0.07, "战斗减伤": 0.05}},
-	"符修": {"name": "符步闪身", "desc": "2件周旋符步错身，3件闪避更稳，4件符剑回刺，5件符意归一。", "mechanic": "周旋触发闪避", "bonuses": {"闪避率": 0.06, "速度": 0.05}},
-	"器修": {"name": "器魂共鸣", "desc": "2件法宝特效反哺成长，3件成长更快，4件有机会额外跳层，5件器魂归一。", "mechanic": "法宝特效带成长", "bonuses": {"攻击力": 0.04, "暴击率": 0.03}, "specials": {"treasure_growth_speed": 0.10, "treasure_effect_chance": 0.05}},
+	"鬼修": {"name": "役鬼临阵", "desc": "2件小鬼护身并助攻；5件鬼王护驾，护魂更厚，役鬼伤害质变。", "mechanic": "小鬼挡刀并助攻", "opening": "役鬼护在身前，抢夺会养鬼", "mastery": "鬼王护驾，护魂和役鬼伤害大幅提高", "bonuses": {"灵力获取": 0.06, "吸血": 0.04}},
+	"体修": {"name": "法相金身", "desc": "2件首次受重击显化法相；5件法相大成，一场战斗可多次护体。", "mechanic": "重伤时法相变大减伤", "opening": "重击时法相挡伤", "mastery": "法相大成，每战可多挡一次重击", "bonuses": {"气血上限": 0.08, "战斗减伤": 0.04, "反伤": 0.03}},
+	"剑修": {"name": "剑影追斩", "desc": "2件抢攻追加剑影；5件剑心归一，抢攻必有额外斩击。", "mechanic": "抢攻连斩", "opening": "抢攻追加剑影", "mastery": "剑心归一，抢攻额外再斩", "bonuses": {"攻击力": 0.07, "暴击率": 0.06, "破防": 0.04}},
+	"情修": {"name": "红尘护心", "desc": "2件让机缘或承灾凝成护心；5件红尘归一，护心碎后会返还一部分。", "mechanic": "让与承劫转护心", "opening": "让与承灾转化为护心", "mastery": "红尘归一，护心受击后回流", "bonuses": {"防御力": 0.05, "灵力获取": 0.05, "每轮回血": 0.02}},
+	"丹修": {"name": "九转丹息", "desc": "2件濒危时丹气续命；5件九转大成，一场战斗可多续一次。", "mechanic": "濒危自动续命", "opening": "濒危时丹息护命", "mastery": "九转大成，每战可多续一次命", "bonuses": {"气血上限": 0.06, "每轮回血": 0.04, "灵力获取": 0.03}},
+	"阵修": {"name": "阵纹控场", "desc": "2件周旋铺阵纹减伤；5件阵心归一，阵纹层数上限提高并绞杀更强。", "mechanic": "周旋布阵减伤", "opening": "周旋时铺阵纹护身", "mastery": "阵心归一，阵纹上限提高", "bonuses": {"防御力": 0.07, "战斗减伤": 0.05}},
+	"符修": {"name": "符步闪身", "desc": "2件周旋符步错身；5件符意归一，闪避上限提高并回刺更狠。", "mechanic": "周旋触发闪避", "opening": "周旋时符步闪避", "mastery": "符意归一，闪避上限和回刺提高", "bonuses": {"闪避率": 0.06, "速度": 0.05}},
+	"器修": {"name": "器魂共鸣", "desc": "2件法宝特效反哺成长；5件器魂归一，抢攻稳定跳层。", "mechanic": "法宝特效带成长", "opening": "法宝特效触发时反哺成长", "mastery": "器魂归一，抢攻稳定涨法宝", "bonuses": {"攻击力": 0.04, "暴击率": 0.03}, "specials": {"treasure_growth_speed": 0.10, "treasure_effect_chance": 0.05}},
 }
 const CULTIVATION_BOND_MULTIPLIERS := {
 	1: 0.65,
@@ -6097,6 +6097,46 @@ func _refresh_cultivation_bond_state(player: PlayerData) -> void:
 	player.final_attributes["treasure_growth_speed"] = _identity_passive_value(player, "器府") + float(specials.get("treasure_growth_speed", 0.0))
 
 
+func _cultivation_bond_announcement_data(player: PlayerData, cultivation_type: String, level: int) -> Dictionary:
+	var bond: Dictionary = CULTIVATION_BOND_DATA.get(cultivation_type, {}) as Dictionary
+	var stage_text: String = "质变" if level < 4 else "大成质变"
+	var effect_key: String = "opening" if level < 4 else "mastery"
+	var effect_text: String = str(bond.get(effect_key, bond.get("mechanic", "构筑机制生效")))
+	return {
+		"player_name": player.player_name if player != null else "",
+		"peer_id": player.peer_id if player != null else 0,
+		"sect": cultivation_type,
+		"level": level,
+		"old_level": maxi(0, level - 1),
+		"resonance_name": str(bond.get("name", cultivation_type)),
+		"title": cultivation_type + "·" + stage_text + "——" + str(bond.get("name", cultivation_type)),
+		"subtitle": effect_text,
+		"duration": 2.6 if level < 4 else 3.4,
+		"color": _sect_color_hex(cultivation_type, level),
+	}
+
+
+func _maybe_emit_cultivation_bond_announcement(player: PlayerData, cultivation_type: String, new_level: int) -> String:
+	if player == null or cultivation_type == "" or cultivation_type == "散修":
+		return ""
+	if not CULTIVATION_BOND_DATA.has(cultivation_type):
+		return ""
+	if new_level != 1 and new_level < 4:
+		return ""
+	var announced: Dictionary = player.final_attributes.get("cultivation_bond_announced_levels", {}) as Dictionary
+	var highest_announced: int = int(announced.get(cultivation_type, 0))
+	if new_level <= highest_announced:
+		return ""
+	announced[cultivation_type] = new_level
+	player.final_attributes["cultivation_bond_announced_levels"] = announced
+	var announcement: Dictionary = _cultivation_bond_announcement_data(player, cultivation_type, new_level)
+	var message: String = str(announcement.get("title", "构筑觉醒"))
+	if NetworkManager.is_host and NetworkManager.connected and not single_player_mode:
+		NetworkManager.send_message("set_bonus_triggered", announcement)
+	set_bonus_triggered.emit(announcement)
+	return message
+
+
 func _identity_stat_sum(player: PlayerData, sect_name: String) -> int:
 	if player == null or not SECT_STATS.has(sect_name):
 		return 0
@@ -6252,11 +6292,14 @@ func check_set_bonus(player: PlayerData) -> String:
 	_refresh_identity_state(player, routes, best_route)
 	_refresh_cultivation_bond_state(player)
 	_refresh_owned_treasure_growth_caps(player)
+	var cultivation_type: String = str(player.final_attributes.get("cultivation_bond_type", "散修"))
+	var cultivation_level: int = int(player.final_attributes.get("cultivation_bond_level", 0))
+	var cultivation_message: String = _maybe_emit_cultivation_bond_announcement(player, cultivation_type, cultivation_level)
 
 	if new_level > old_level and new_level > 0:
 		var highest_announced_level: int = int(player.final_attributes.get("identity_highest_announced_level", old_level))
 		if new_level <= highest_announced_level:
-			return ""
+			return cultivation_message
 		player.final_attributes["identity_highest_announced_level"] = new_level
 		var announcement: Dictionary = _identity_announcement_data(player, sect_name, old_level, new_level)
 		var message: String = str(announcement.get("title", "身份晋升"))
@@ -6265,7 +6308,7 @@ func check_set_bonus(player: PlayerData) -> String:
 			NetworkManager.send_message("set_bonus_triggered", announcement)
 		set_bonus_triggered.emit(announcement)
 		return message
-	return ""
+	return cultivation_message
 
 
 func get_set_bonus_progress(player: PlayerData) -> Dictionary:
@@ -6433,6 +6476,13 @@ func _cultivation_bond_stage_lines(cultivation_type: String, route: Dictionary) 
 		var special_text: String = _cultivation_special_summary(stage_specials)
 		if special_text != "":
 			effect_text += "、" + special_text
+		var mechanic_text: String = ""
+		if level == 1:
+			mechanic_text = str(bond_data.get("opening", bond_data.get("mechanic", "")))
+		elif level == 4:
+			mechanic_text = str(bond_data.get("mastery", "大成质变"))
+		if mechanic_text != "":
+			effect_text = mechanic_text + "；" + effect_text
 		lines.append(state + "｜" + str(need_count) + "件 " + _cultivation_bond_level_name(level) + "：" + effect_text)
 	return lines
 
@@ -6632,6 +6682,14 @@ func _sect_color_hex(sect_name: String, _level: int = 0) -> String:
 			return "#f0c040"
 		"情修":
 			return "#40c0a0"
+		"丹修":
+			return "#f08040"
+		"阵修":
+			return "#6080d0"
+		"符修":
+			return "#80c080"
+		"器修":
+			return "#d0a060"
 		_:
 			return "#e0d5b7"
 
@@ -8234,8 +8292,14 @@ func _ghost_attack_damage(player: PlayerData, duel: bool = false) -> int:
 	if ghost_power <= 0 and route_level <= 0:
 		return 0
 	if duel:
-		return maxi(1, int(round(float(ghost_power) * 0.16 + float(route_level) * 2.0)))
-	return maxi(1, int(round(float(ghost_power) / 18.0 + float(route_level))))
+		var duel_damage: float = float(ghost_power) * 0.16 + float(route_level) * 2.0
+		if route_level >= 4:
+			duel_damage *= 1.35
+		return maxi(1, int(round(duel_damage)))
+	var damage: float = float(ghost_power) / 18.0 + float(route_level)
+	if route_level >= 4:
+		damage *= 1.50
+	return maxi(1, int(round(damage)))
 
 
 func _feed_ghosts(player: PlayerData, amount: int, reason: String = "") -> String:
@@ -10714,7 +10778,8 @@ func _battle_hurt_after_reduction(player: PlayerData, hurt: int, action: String 
 		return 0
 	var talisman_level: int = _cultivation_route_level(player, "符修")
 	if player != null and action == "周旋" and talisman_level >= 1:
-		var talisman_chance: float = clampf(0.22 + float(talisman_level) * 0.08 + float(player.stats.get("身法", 0)) * 0.01, 0.0, 0.62)
+		var talisman_cap: float = 0.78 if talisman_level >= 4 else 0.62
+		var talisman_chance: float = clampf(0.22 + float(talisman_level) * 0.08 + float(player.stats.get("身法", 0)) * 0.01, 0.0, talisman_cap)
 		if rng.randf() <= talisman_chance:
 			player.final_attributes["last_battle_dodged"] = true
 			player.final_attributes["last_talisman_dodge"] = true
@@ -10737,10 +10802,12 @@ func _battle_hurt_after_reduction(player: PlayerData, hurt: int, action: String 
 		reduction += _identity_passive_value(player, "符箓门")
 	var array_level: int = _cultivation_route_level(player, "阵修")
 	if player != null and action == "周旋" and array_level >= 1:
-		var array_marks: int = clampi(int(player.final_attributes.get("battle_array_marks", 0)) + 1, 1, 6)
+		var array_mark_cap: int = 8 if array_level >= 4 else 6
+		var array_marks: int = clampi(int(player.final_attributes.get("battle_array_marks", 0)) + 1, 1, array_mark_cap)
 		player.final_attributes["battle_array_marks"] = array_marks
 		player.final_attributes["last_array_guard"] = array_marks
-		reduction += minf(0.28, float(array_marks) * (0.04 + float(array_level) * 0.015))
+		var array_reduction_cap: float = 0.40 if array_level >= 4 else 0.28
+		reduction += minf(array_reduction_cap, float(array_marks) * (0.04 + float(array_level) * 0.015))
 	var defense_value: float = _battle_player_defense(player)
 	var defense_reduction: float = defense_value / (defense_value + BATTLE_DEFENSE_REDUCTION_SCALE) if defense_value > 0.0 else 0.0
 	reduction += minf(defense_reduction, BATTLE_DEFENSE_REDUCTION_CAP)
@@ -10779,22 +10846,34 @@ func _battle_hurt_after_reduction(player: PlayerData, hurt: int, action: String 
 			var old_hp: int = player.qi_xue
 			player.qi_xue = mini(max_hp, player.qi_xue + heart_heal)
 			player.final_attributes["last_heart_guard_heal"] = player.qi_xue - old_hp
+		if emotion_level >= 4:
+			var returned_guard: int = maxi(1, int(round(float(heart_absorb) * 0.35)))
+			player.final_attributes["heart_guard"] = int(player.final_attributes.get("heart_guard", 0)) + returned_guard
+			player.final_attributes["last_heart_guard_return"] = returned_guard
 	var body_level: int = _cultivation_route_level(player, "体修")
-	if body_level >= 1 and final_hurt > 0 and not bool(player.final_attributes.get("battle_dharma_body_used", false)):
+	var body_uses: int = int(player.final_attributes.get("battle_dharma_body_uses", 0))
+	var body_max_uses: int = 2 if body_level >= 4 else 1
+	if body_level >= 1 and final_hurt > 0 and body_uses < body_max_uses:
 		var heavy_hit: bool = final_hurt >= maxi(6, int(round(float(max_hp) * 0.08)))
 		if heavy_hit or player.qi_xue <= int(round(float(max_hp) * 0.45)):
-			var body_rate: float = clampf(0.30 + float(body_level) * 0.08, 0.0, 0.60)
+			var body_rate: float = clampf(0.30 + float(body_level) * 0.08 + (0.10 if body_level >= 4 else 0.0), 0.0, 0.72)
 			var body_absorb: int = mini(final_hurt, maxi(1, int(round(float(final_hurt) * body_rate))))
-			player.final_attributes["battle_dharma_body_used"] = true
+			body_uses += 1
+			player.final_attributes["battle_dharma_body_uses"] = body_uses
+			player.final_attributes["battle_dharma_body_used"] = body_uses >= body_max_uses
 			player.final_attributes["last_dharma_body_absorb"] = body_absorb
 			final_hurt -= body_absorb
 	var dan_level: int = _cultivation_route_level(player, "丹修")
-	if dan_level >= 1 and final_hurt > 0 and not bool(player.final_attributes.get("battle_dan_life_used", false)):
+	var dan_uses: int = int(player.final_attributes.get("battle_dan_life_uses", 0))
+	var dan_max_uses: int = 2 if dan_level >= 4 else 1
+	if dan_level >= 1 and final_hurt > 0 and dan_uses < dan_max_uses:
 		if player.qi_xue - final_hurt <= int(round(float(max_hp) * 0.35)):
 			var reserve: int = int(player.final_attributes.get("dan_life_reserve", 0))
-			var dan_absorb: int = mini(final_hurt, maxi(1, int(round(float(max_hp) * (0.10 + float(dan_level) * 0.03))))) + reserve * 3
+			var dan_absorb: int = mini(final_hurt, maxi(1, int(round(float(max_hp) * (0.10 + float(dan_level) * 0.03 + (0.05 if dan_level >= 4 else 0.0)))))) + reserve * 3
 			dan_absorb = mini(final_hurt, dan_absorb)
-			player.final_attributes["battle_dan_life_used"] = true
+			dan_uses += 1
+			player.final_attributes["battle_dan_life_uses"] = dan_uses
+			player.final_attributes["battle_dan_life_used"] = dan_uses >= dan_max_uses
 			player.final_attributes["last_dan_life_absorb"] = dan_absorb
 			if reserve > 0:
 				player.final_attributes["dan_life_reserve"] = reserve - 1
@@ -10833,7 +10912,9 @@ func _prepare_battle_route_mechanics(player: PlayerData) -> String:
 	check_set_bonus(player)
 	player.final_attributes["battle_array_marks"] = 0
 	player.final_attributes["battle_dharma_body_used"] = false
+	player.final_attributes["battle_dharma_body_uses"] = 0
 	player.final_attributes["battle_dan_life_used"] = false
+	player.final_attributes["battle_dan_life_uses"] = 0
 	_clear_last_battle_mechanic_flags(player)
 	if not _has_cultivation_mechanic(player, "鬼修"):
 		player.final_attributes.erase("battle_ghost_guard")
@@ -10842,8 +10923,11 @@ func _prepare_battle_route_mechanics(player: PlayerData) -> String:
 	var strength: float = _cultivation_route_strength(player, "鬼修")
 	var ghost_power: int = int(player.final_attributes.get("ghost_power", 0))
 	var guard: int = maxi(4, int(round(7.0 + float(level) * 4.0 + strength * 3.0 + float(ghost_power) / 12.0)))
+	if level >= 4:
+		guard += maxi(3, int(round(float(ghost_power) / 10.0 + strength * 2.0)))
 	player.final_attributes["battle_ghost_guard"] = guard
-	return player.player_name + "役鬼临阵，小鬼护在身前（护魂" + str(guard) + "）"
+	var guard_name: String = "鬼王护驾" if level >= 4 else "役鬼临阵"
+	return player.player_name + guard_name + "，小鬼护在身前（护魂" + str(guard) + "）"
 
 
 func _clear_last_battle_mechanic_flags(player: PlayerData) -> void:
@@ -10861,6 +10945,7 @@ func _clear_last_battle_mechanic_flags(player: PlayerData) -> void:
 		"last_array_counter_damage",
 		"last_talisman_counter_damage",
 		"last_heart_guard_heal",
+		"last_heart_guard_return",
 		"last_dan_life_heal",
 		"last_build_pressure_hurt",
 		"last_enemy_threat_hurt",
@@ -10890,6 +10975,9 @@ func _battle_mechanic_log(player: PlayerData) -> String:
 	var heart_heal: int = int(player.final_attributes.get("last_heart_guard_heal", 0))
 	if heart_heal > 0:
 		parts.append("护心回春+" + str(heart_heal))
+	var heart_return: int = int(player.final_attributes.get("last_heart_guard_return", 0))
+	if heart_return > 0:
+		parts.append("红尘回流+" + str(heart_return))
 	var dharma_absorb: int = int(player.final_attributes.get("last_dharma_body_absorb", 0))
 	if dharma_absorb > 0:
 		parts.append("法相金身-" + str(dharma_absorb))

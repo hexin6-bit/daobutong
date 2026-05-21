@@ -2619,13 +2619,14 @@ func _on_set_bonus_triggered(data: Dictionary) -> void:
 	_spawn_set_bonus_announcement(
 		title,
 		str(data.get("player_name", "")),
+		str(data.get("subtitle", "身份晋升")),
 		Color(str(data.get("color", "#f0c040"))),
 		float(data.get("duration", 2.0)),
 		int(data.get("level", 1))
 	)
 
 
-func _spawn_set_bonus_announcement(title: String, player_name: String, color: Color, duration: float, level: int) -> void:
+func _spawn_set_bonus_announcement(title: String, player_name: String, subtitle: String, color: Color, duration: float, level: int) -> void:
 	if floating_layer == null:
 		return
 	var panel := PanelContainer.new()
@@ -2645,9 +2646,9 @@ func _spawn_set_bonus_announcement(title: String, player_name: String, color: Co
 	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	box.add_child(title_label)
 
-	var line := "身份晋升"
+	var line := subtitle
 	if player_name != "":
-		line = player_name + "的" + line
+		line = player_name + "：" + line
 	var line_label := _make_label(line, 24, Color("#e0d5b7"), HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(line_label)
 
