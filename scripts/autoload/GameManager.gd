@@ -6370,14 +6370,12 @@ func get_affix_guide_text(sect_name: String, player: PlayerData = null) -> Strin
 		lines.append("当前：" + str(count) + "/" + str(MAX_CULTIVATION_SET_COUNT) + "｜" + level_name + "｜功法" + str(int(route.get("techniques", 0))) + " 法宝" + str(int(route.get("treasures", 0))))
 		lines.append("下一步：" + ("已成套，换高品质/练大成" if level >= 4 else "再找" + str(maxi(0, next_count - count)) + "件" + sect_name))
 		lines.append("")
-		lines.append("成套：同修2件启动，3/4/5件变强。")
 		var bond: Dictionary = CULTIVATION_BOND_DATA.get(sect_name, {}) as Dictionary
 		var mechanic: String = str(bond.get("mechanic", ""))
 		if mechanic != "":
 			lines.append("机制：" + mechanic)
-		var bonuses: Dictionary = bond.get("bonuses", {}) as Dictionary
-		if not bonuses.is_empty():
-			lines.append("效果：" + _set_bonus_effect_summary(bonuses))
+		lines.append("阶段：")
+		lines.append_array(_cultivation_bond_stage_lines(sect_name, route))
 	else:
 		lines.append(sect_name + "宗门")
 		var identity_route: Dictionary = {}
@@ -6393,6 +6391,58 @@ func get_affix_guide_text(sect_name: String, player: PlayerData = null) -> Strin
 		if not passive.is_empty():
 			lines.append("被动：" + str(passive.get("desc", "")))
 	return "\n".join(lines)
+
+
+func _cultivation_bond_stage_lines(cultivation_type: String, route: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	var current_level: int = int(route.get("level", 0))
+	var count: int = int(route.get("count", 0))
+	var avg_quality: float = 1.0
+	var avg_realm: float = 1.0
+	if count > 0:
+		avg_quality = float(route.get("quality", 0.0)) / float(maxi(1, count))
+		avg_realm = float(route.get("realm", 0.0)) / float(maxi(1, count))
+	var bond_data: Dictionary = CULTIVATION_BOND_DATA.get(cultivation_type, {}) as Dictionary
+	var bond_bonuses: Dictionary = bond_data.get("bonuses", {}) as Dictionary
+	var bond_specials: Dictionary = bond_data.get("specials", {}) as Dictionary
+	for level in range(1, 5):
+		var need_count: int = level + 1
+		var state: String = "未激活"
+		if current_level == level:
+			state = "当前"
+		elif current_level > level:
+			state = "已激活"
+		var strength: float = _cultivation_bond_multiplier(level) * (0.75 + avg_quality * 0.12 + avg_realm * 0.12)
+		var stage_bonuses: Dictionary = {}
+		for bonus_name in bond_bonuses:
+			stage_bonuses[str(bonus_name)] = float(bond_bonuses[bonus_name]) * strength
+		var stage_specials: Dictionary = {}
+		for special_name in bond_specials:
+			stage_specials[str(special_name)] = float(bond_specials[special_name]) * strength
+		var effect_text: String = _set_bonus_effect_summary(stage_bonuses)
+		var special_text: String = _cultivation_special_summary(stage_specials)
+		if special_text != "":
+			effect_text += "、" + special_text
+		lines.append(state + "｜" + str(need_count) + "件 " + _cultivation_bond_level_name(level) + "：" + effect_text)
+	return lines
+
+
+func _cultivation_special_summary(specials: Dictionary) -> String:
+	if specials.is_empty():
+		return ""
+	var parts: Array[String] = []
+	for special_name in specials:
+		var label: String = str(special_name)
+		match label:
+			"treasure_growth_speed":
+				label = "法宝成长速度"
+			"treasure_effect_chance":
+				label = "法宝特效概率"
+		var value: float = float(specials[special_name])
+		var suffix: String = "%" if absf(value) < 2.0 else ""
+		var shown: String = str(int(round(value * 100.0))) if suffix == "%" else str(int(round(value)))
+		parts.append(label + ("+" if value >= 0.0 else "") + shown + suffix)
+	return "、".join(parts)
 
 
 func get_set_bonus_effect_text(sect_name: String, level: int) -> String:

@@ -2371,9 +2371,9 @@ func _on_build_route_pressed(sect_name: String) -> void:
 	var player: PlayerData = _get_my_player()
 	build_info_dialog.title = "修行羁绊"
 	build_info_dialog.dialog_text = GameManager.get_affix_guide_text(sect_name, player)
-	build_info_dialog.min_size = Vector2i(520, 300)
+	build_info_dialog.min_size = Vector2i(640, 430)
 	build_info_dialog.add_theme_font_size_override("font_size", 22)
-	build_info_dialog.popup_centered(Vector2i(520, 300))
+	build_info_dialog.popup_centered(Vector2i(640, 430))
 
 
 func _sect_short_name(sect_name: String) -> String:
