@@ -68,7 +68,7 @@ func _build_ui() -> void:
 
 	var root := VBoxContainer.new()
 	UIEffects.apply_phone_safe_margins(root, 38.0, 44.0, 48.0)
-	root.add_theme_constant_override("separation", 6)
+	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
 	label_title = _make_label("仙位之争", 28, GOLD_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
@@ -78,20 +78,19 @@ func _build_ui() -> void:
 	root.add_child(arena_panel)
 
 	var mid := HBoxContainer.new()
-	mid.custom_minimum_size = Vector2(1, 238)
+	mid.custom_minimum_size = Vector2(1, 138)
 	mid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	mid.add_theme_constant_override("separation", 8)
 	root.add_child(mid)
 
 	panel_a = _make_panel()
-	label_a = _make_label(GameManager.player_a.player_name, 13, TEXT_COLOR)
+	label_a = _make_label(GameManager.player_a.player_name, 15, TEXT_COLOR)
 	hp_a = _make_hp_bar()
 	technique_grid_a = _make_technique_grid()
 	var box_a := VBoxContainer.new()
 	box_a.add_theme_constant_override("separation", 6)
 	box_a.add_child(label_a)
 	box_a.add_child(hp_a)
-	box_a.add_child(technique_grid_a)
 	panel_a.add_child(box_a)
 	mid.add_child(panel_a)
 
@@ -101,14 +100,13 @@ func _build_ui() -> void:
 	mid.add_child(vs)
 
 	panel_b = _make_panel()
-	label_b = _make_label(GameManager.player_b.player_name, 13, TEXT_COLOR)
+	label_b = _make_label(GameManager.player_b.player_name, 15, TEXT_COLOR)
 	hp_b = _make_hp_bar()
 	technique_grid_b = _make_technique_grid()
 	var box_b := VBoxContainer.new()
 	box_b.add_theme_constant_override("separation", 6)
 	box_b.add_child(label_b)
 	box_b.add_child(hp_b)
-	box_b.add_child(technique_grid_b)
 	panel_b.add_child(box_b)
 	mid.add_child(panel_b)
 
@@ -116,23 +114,27 @@ func _build_ui() -> void:
 	root.add_child(label_round)
 
 	var action_panel := PanelContainer.new()
-	action_panel.custom_minimum_size = Vector2(1, 98)
+	action_panel.custom_minimum_size = Vector2(1, 118)
 	action_panel.add_theme_stylebox_override("panel", _make_panel_style(false))
 	root.add_child(action_panel)
 
 	label_last_action = _make_label("等待出招：最终对战看境界、战力、速度、法宝、构筑、暴击和闪避。", 15, TEXT_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+	label_last_action.text = "等待出招：中间看本回合，下方只留最近战报。"
+	label_last_action.add_theme_font_size_override("font_size", 18)
 	label_last_action.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	action_panel.add_child(label_last_action)
 
 	log_scroll = ScrollContainer.new()
-	log_scroll.custom_minimum_size = Vector2(1, 76)
+	log_scroll.custom_minimum_size = Vector2(1, 104)
 	log_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	log_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	log_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root.add_child(log_scroll)
 
 	label_log = _make_label("等待对决数据...", 15, TEXT_COLOR, HORIZONTAL_ALIGNMENT_LEFT)
-	label_log.custom_minimum_size = Vector2(360, 76)
+	label_log.text = "等待对决数据..."
+	label_log.add_theme_font_size_override("font_size", 16)
+	label_log.custom_minimum_size = Vector2(360, 104)
 	label_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	log_scroll.add_child(label_log)
@@ -210,13 +212,13 @@ func _make_panel_style(glowing: bool) -> StyleBoxFlat:
 
 func _make_duel_arena() -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1, 170)
+	panel.custom_minimum_size = Vector2(1, 230)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_theme_stylebox_override("panel", _make_arena_style())
 
 	arena_field = Control.new()
 	arena_field.clip_contents = false
-	arena_field.custom_minimum_size = Vector2(1, 170)
+	arena_field.custom_minimum_size = Vector2(1, 230)
 	arena_field.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	arena_field.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel.add_child(arena_field)
@@ -518,7 +520,7 @@ func _on_duel_data(data: Dictionary) -> void:
 	label_round.text = "回合：" + str(int(data.get("round", 1))) + "｜当前：" + _duel_actor_name(current_attacker_key) + "出招"
 
 	var logs: Array = data.get("log", []) as Array
-	label_log.text = "\n".join(logs)
+	label_log.text = _format_recent_logs(logs)
 	_scroll_log_to_bottom()
 	var last_result: Dictionary = data.get("last_result", {}) as Dictionary
 	if label_last_action != null:
@@ -644,31 +646,33 @@ func _format_effects_limited(effects: Array, limit: int) -> String:
 
 
 func _format_opening_compare(stats_a: Dictionary, stats_b: Dictionary) -> String:
-	var line_one: String = GameManager.player_a.player_name + "战力" + str(int(stats_a.get("战力", 0))) + "｜" + GameManager.player_b.player_name + "战力" + str(int(stats_b.get("战力", 0)))
-	var line_two: String = GameManager.get_visible_combat_power_formula_text()
-	var line_three: String = "每回合会显示伤害来源、闪避暴击和胜负原因。"
-	return line_one + "\n" + line_two + "\n" + line_three
+	var power_a: int = int(stats_a.get("战力", 0))
+	var power_b: int = int(stats_b.get("战力", 0))
+	var realm_a: String = str(stats_a.get("境界", "炼气"))
+	var realm_b: String = str(stats_b.get("境界", "炼气"))
+	var route_a: String = str(stats_a.get("流派", "散修"))
+	var route_b: String = str(stats_b.get("流派", "散修"))
+	return GameManager.player_a.player_name + " " + realm_a + "·" + route_a + " 战力" + str(power_a) + "\n" + GameManager.player_b.player_name + " " + realm_b + "·" + route_b + " 战力" + str(power_b) + "\n每回合只看：谁出手、伤害、闪避/暴击、关键效果。"
 
 
 func _format_last_action(result: Dictionary) -> String:
 	if result.is_empty():
-		return "等待出招：最终对战看境界、战力、速度、法宝、构筑、暴击和闪避。"
-	var attacker: String = str(result.get("攻击方", "攻击方"))
-	var defender: String = str(result.get("防守方", "防守方"))
-	var actual_damage: int = int(result.get("实际伤害", result.get("damage", 0)))
-	var header: String = attacker + " → " + defender + "："
+		return "等待出招：中间看本回合，下方只留最近战报。"
+	var clean_attacker: String = str(result.get("攻击方", "攻击方"))
+	var clean_defender: String = str(result.get("防守方", "防守方"))
+	var clean_damage: int = int(result.get("实际伤害", result.get("damage", 0)))
+	var clean_header: String = clean_attacker + " → " + clean_defender + "："
 	if bool(result.get("闪避", false)):
-		header += "被身法避开"
+		clean_header += "闪避成功"
 	else:
-		header += "造成" + str(actual_damage) + "伤害"
+		clean_header += "造成 " + str(clean_damage) + " 伤害"
 		if bool(result.get("暴击", false)):
-			header += "（暴击）"
-	var lines: Array[String] = [header]
-	var details: Array = result.get("明细", []) as Array
-	var max_detail_count: int = mini(4, details.size())
-	for i in range(max_detail_count):
-		lines.append("· " + str(details[i]))
-	return "\n".join(lines)
+			clean_header += "（暴击）"
+	var clean_lines: Array[String] = [clean_header]
+	var clean_details: Array = result.get("明细", []) as Array
+	for i in range(mini(3, clean_details.size())):
+		clean_lines.append("· " + str(clean_details[i]))
+	return "\n".join(clean_lines)
 
 
 func _format_duel_percent(value: float) -> String:
@@ -676,6 +680,20 @@ func _format_duel_percent(value: float) -> String:
 
 
 func _update_panel(label: Label, hp_bar: ProgressBar, player_name: String, stats: Dictionary) -> void:
+	var clean_hp_max: int = maxi(1, int(stats.get("气血", 1)))
+	var clean_hp_now: int = int(stats.get("当前气血", clean_hp_max))
+	hp_bar.max_value = clean_hp_max
+	var clean_tween := create_tween()
+	clean_tween.tween_property(hp_bar, "value", float(clampi(clean_hp_now, 0, clean_hp_max)), 0.18)
+	var clean_treasure: Dictionary = stats.get("法宝", {}) as Dictionary
+	var clean_treasure_text: String = "无法宝"
+	if not clean_treasure.is_empty():
+		clean_treasure_text = str(clean_treasure.get("name", "法宝")) + " " + str(int(stats.get("法宝成长", 0)))
+	label.text = player_name + " · " + str(stats.get("境界", "炼气")) + " · " + str(stats.get("流派", "散修"))
+	label.text += "\n战力 " + str(int(stats.get("战力", 0))) + "｜血 " + str(clean_hp_now) + "/" + str(clean_hp_max)
+	label.text += "\n攻 " + str(stats.get("攻击力", 0)) + "  防 " + str(stats.get("防御力", 0)) + "  速 " + str(stats.get("速度", 0))
+	label.text += "\n暴 " + _format_duel_percent(float(stats.get("暴击率", 0.0))) + "  闪 " + _format_duel_percent(float(stats.get("闪避率", 0.0))) + "｜" + clean_treasure_text
+	return
 	var hp_max: int = maxi(1, int(stats.get("气血", 1)))
 	var hp_now: int = int(stats.get("当前气血", hp_max))
 	hp_bar.max_value = hp_max
@@ -889,6 +907,19 @@ func _scroll_log_to_bottom() -> void:
 		log_scroll.scroll_vertical = int(log_scroll.get_v_scroll_bar().max_value)
 
 
+func _format_recent_logs(logs: Array, limit: int = 4) -> String:
+	if logs.is_empty():
+		return "战斗尚未开始。"
+	var start_index: int = maxi(0, logs.size() - limit)
+	var lines: Array[String] = []
+	for i in range(start_index, logs.size()):
+		var line: String = str(logs[i])
+		if line.length() > 56:
+			line = line.substr(0, 54) + "..."
+		lines.append(line)
+	return "\n".join(lines)
+
+
 func _format_techniques(player_name: String) -> String:
 	var player := GameManager.player_a if player_name == GameManager.player_a.player_name else GameManager.player_b
 	if player.techniques.is_empty():
@@ -961,7 +992,7 @@ func _on_duel_finished(data: Dictionary) -> void:
 		var sparring_final_stats: Dictionary = data.get("final_stats", {}) as Dictionary
 		var sparring_logs: Array = sparring_final_stats.get("log", []) as Array
 		if not sparring_logs.is_empty():
-			label_log.text = "\n".join(sparring_logs)
+			label_log.text = _format_recent_logs(sparring_logs, 5)
 		if label_last_action != null:
 			label_last_action.text = _format_duel_finish_summary(data)
 		label_log.text += "\n论道切磋结束，确认后进入下一轮。"
@@ -978,7 +1009,7 @@ func _on_duel_finished(data: Dictionary) -> void:
 	var finish_final_stats: Dictionary = data.get("final_stats", {}) as Dictionary
 	var finish_logs: Array = finish_final_stats.get("log", []) as Array
 	if not finish_logs.is_empty():
-		label_log.text = "\n".join(finish_logs)
+		label_log.text = _format_recent_logs(finish_logs, 5)
 	if label_last_action != null:
 		label_last_action.text = _format_duel_finish_summary(data)
 	if is_local_winner:

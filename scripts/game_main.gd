@@ -2955,10 +2955,7 @@ func _focus_card(index: int) -> void:
 func _hide_result_toast() -> void:
 	if result_toast != null:
 		result_toast.visible = false
-		if result_toast.has_meta("local_only"):
-			result_toast.remove_meta("local_only")
-		if result_toast.has_meta("local_log_message"):
-			result_toast.remove_meta("local_log_message")
+		_clear_result_toast_local_meta()
 	_set_result_card_mode(false)
 	if btn_continue_result != null:
 		btn_continue_result.disabled = false
@@ -2966,6 +2963,15 @@ func _hide_result_toast() -> void:
 		contest_button_row.visible = false
 	result_continue_sent = false
 	latest_result_round_finished = false
+
+
+func _clear_result_toast_local_meta() -> void:
+	if result_toast == null:
+		return
+	if result_toast.has_meta("local_only"):
+		result_toast.remove_meta("local_only")
+	if result_toast.has_meta("local_log_message"):
+		result_toast.remove_meta("local_log_message")
 
 
 func _show_pending_battle_reward_feedback() -> void:
@@ -3035,6 +3041,7 @@ func _show_choice_pulse(choice: String) -> void:
 func _show_result_feedback(my_result: Dictionary, enemy_result: Dictionary, card: Dictionary, contest_result: Dictionary = {}) -> void:
 	if result_toast == null:
 		return
+	_clear_result_toast_local_meta()
 	_set_result_card_mode(true)
 
 	var my_choice_raw: String = str(my_result.get("choice", ""))
@@ -3086,12 +3093,19 @@ func _on_continue_result_pressed() -> void:
 
 	if result_toast != null and bool(result_toast.get_meta("local_only", false)):
 		var local_log_message: String = str(result_toast.get_meta("local_log_message", "战利品已收入囊中"))
-		result_toast.remove_meta("local_only")
-		if result_toast.has_meta("local_log_message"):
-			result_toast.remove_meta("local_log_message")
-		_hide_result_toast()
-		label_log.text = "日志：" + local_log_message
-		return
+		if _has_unconfirmed_card_result():
+			_clear_result_toast_local_meta()
+			if btn_continue_result != null:
+				btn_continue_result.disabled = false
+				btn_continue_result.text = "继续"
+			result_continue_sent = false
+		else:
+			result_toast.remove_meta("local_only")
+			if result_toast.has_meta("local_log_message"):
+				result_toast.remove_meta("local_log_message")
+			_hide_result_toast()
+			label_log.text = "日志：" + local_log_message
+			return
 
 	if GameManager.current_state == GameManager.GameState.REST:
 		_on_rest_confirm_pressed()
@@ -5132,6 +5146,24 @@ func _show_crafting_result(data: Dictionary) -> void:
 	var material_name: String = str(data.get("material_name", "灵草" if action == "alchemy" else "矿材"))
 	var grade_text: String = _crafting_grade_display(str(data.get("grade", "good")))
 	var message: String = str(data.get("message", "开炉完成"))
+	if _has_unconfirmed_card_result():
+		_clear_result_toast_local_meta()
+		label_log.text = "日志：" + title + "：" + material_name + "，" + grade_text + "；" + message
+		_update_player_info()
+		if result_toast != null and not result_toast.visible:
+			_apply_panel_style(result_toast, Color(0.08, 0.08, 0.16, 0.96))
+			label_result_title.text = "本张已结算"
+			label_result_title.add_theme_color_override("font_color", Color("#f0c040"))
+			label_result_detail.text = "炼丹/炼器结果已写入日志。\n请先确认本张卡牌结果，再进入下一张。"
+			result_toast.visible = true
+			result_toast.z_index = 240
+			result_toast.mouse_filter = Control.MOUSE_FILTER_STOP
+			result_toast.move_to_front()
+		if btn_continue_result != null:
+			btn_continue_result.visible = true
+			btn_continue_result.disabled = result_continue_sent
+			btn_continue_result.text = "等待对方确认..." if result_continue_sent else "继续"
+		return
 	_apply_panel_style(result_toast, Color(0.18, 0.13, 0.03, 0.97))
 	label_result_title.text = title
 	label_result_title.add_theme_color_override("font_color", Color("#f0c040"))
@@ -5156,6 +5188,14 @@ func _show_crafting_result(data: Dictionary) -> void:
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(result_toast, "modulate:a", 1.0, 0.16)
 	tween.tween_property(result_toast, "scale", Vector2.ONE, 0.2)
+
+
+func _has_unconfirmed_card_result() -> bool:
+	if GameManager.current_state != GameManager.GameState.BARGAIN:
+		return false
+	if latest_settled_index < 0 and not latest_result_round_finished:
+		return false
+	return true
 
 
 func _alchemy_result_title(recipe: String) -> String:
