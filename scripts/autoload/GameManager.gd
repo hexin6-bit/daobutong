@@ -312,14 +312,14 @@ const TREASURE_GROWTH := {
 	"器修": {"name": "器魂", "trigger": "法宝每涨5层+1，觉醒时+5"},
 }
 const CULTIVATION_BOND_DATA := {
-	"鬼修": {"name": "役鬼临阵", "desc": "2件小鬼护身并助攻；5件鬼王护驾，护魂更厚，役鬼伤害质变。", "mechanic": "小鬼挡刀并助攻", "opening": "役鬼护在身前，抢夺会养鬼", "mastery": "鬼王护驾，护魂和役鬼伤害大幅提高", "bonuses": {"灵力获取": 0.06, "吸血": 0.04}},
-	"体修": {"name": "法相金身", "desc": "2件首次受重击显化法相；5件法相大成，一场战斗可多次护体。", "mechanic": "重伤时法相变大减伤", "opening": "重击时法相挡伤", "mastery": "法相大成，每战可多挡一次重击", "bonuses": {"气血上限": 0.08, "战斗减伤": 0.04, "反伤": 0.03}},
-	"剑修": {"name": "剑影追斩", "desc": "2件抢攻追加剑影；5件剑心归一，抢攻必有额外斩击。", "mechanic": "抢攻连斩", "opening": "抢攻追加剑影", "mastery": "剑心归一，抢攻额外再斩", "bonuses": {"攻击力": 0.07, "暴击率": 0.06, "破防": 0.04}},
-	"情修": {"name": "红尘护心", "desc": "2件让机缘或承灾凝成护心；5件红尘归一，护心碎后会返还一部分。", "mechanic": "让与承劫转护心", "opening": "让与承灾转化为护心", "mastery": "红尘归一，护心受击后回流", "bonuses": {"防御力": 0.05, "灵力获取": 0.05, "每轮回血": 0.02}},
-	"丹修": {"name": "九转丹息", "desc": "2件濒危时丹气续命；5件九转大成，一场战斗可多续一次。", "mechanic": "濒危自动续命", "opening": "濒危时丹息护命", "mastery": "九转大成，每战可多续一次命", "bonuses": {"气血上限": 0.06, "每轮回血": 0.04, "灵力获取": 0.03}},
-	"阵修": {"name": "阵纹控场", "desc": "2件周旋铺阵纹减伤；5件阵心归一，阵纹层数上限提高并绞杀更强。", "mechanic": "周旋布阵减伤", "opening": "周旋时铺阵纹护身", "mastery": "阵心归一，阵纹上限提高", "bonuses": {"防御力": 0.07, "战斗减伤": 0.05}},
-	"符修": {"name": "符步闪身", "desc": "2件周旋符步错身；5件符意归一，闪避上限提高并回刺更狠。", "mechanic": "周旋触发闪避", "opening": "周旋时符步闪避", "mastery": "符意归一，闪避上限和回刺提高", "bonuses": {"闪避率": 0.06, "速度": 0.05}},
-	"器修": {"name": "器魂共鸣", "desc": "2件法宝特效反哺成长；5件器魂归一，抢攻稳定跳层。", "mechanic": "法宝特效带成长", "opening": "法宝特效触发时反哺成长", "mastery": "器魂归一，抢攻稳定涨法宝", "bonuses": {"攻击力": 0.04, "暴击率": 0.03}, "specials": {"treasure_growth_speed": 0.10, "treasure_effect_chance": 0.05}},
+	"鬼修": {"name": "役鬼临阵", "desc": "2件役鬼护身；3件抢夺养魂；4件魂力反哺；5件鬼王护驾。", "mechanic": "小鬼挡刀并助攻", "opening": "役鬼护在身前，抢夺会养鬼", "mastery": "鬼王护驾，护魂和役鬼伤害大幅提高", "stages": {1: "役鬼护身：第一次受重击时小鬼挡刀，并在抢攻时补一段魂伤", 2: "夺缘养魂：抢机缘、击杀会额外养魂，吸血与灵力获取提高", 3: "魂力反哺：护魂更厚，役鬼补刀更疼，低血时更容易续住", 4: "鬼王护驾：开局召鬼王护身，役鬼伤害质变，吸血明显增强"}, "bonuses": {"灵力获取": 0.06, "吸血": 0.04}},
+	"体修": {"name": "法相金身", "desc": "2件显化法相；3件厚血反震；4件重伤硬扛；5件金身大成。", "mechanic": "重伤时法相变大减伤", "opening": "重击时法相挡伤", "mastery": "法相大成，每战可多挡一次重击", "stages": {1: "法相初显：首次受重击时显化法相，减免一截伤害", 2: "铜皮铁骨：气血、防御和反震提高，越挨打越稳", 3: "不坏真身：重伤时额外护体，普通妖兽更难直接压垮", 4: "大罗法相：一场战斗可多次护体，反震与减伤大幅提高"}, "bonuses": {"气血上限": 0.08, "战斗减伤": 0.04, "反伤": 0.03}},
+	"剑修": {"name": "剑影追斩", "desc": "2件剑影追斩；3件抢先破防；4件连斩成势；5件剑心归一。", "mechanic": "抢攻连斩", "opening": "抢攻追加剑影", "mastery": "剑心归一，抢攻额外再斩", "stages": {1: "剑影初成：抢攻时追加剑影，打出额外斩击", 2: "剑势压身：速度、暴击和破防提高，更容易先手压制", 3: "连斩成势：连续抢攻时伤害更稳定，暴击收益更高", 4: "剑心归一：抢攻必有额外斩击，爆发与破防质变"}, "bonuses": {"攻击力": 0.07, "暴击率": 0.06, "破防": 0.04}},
+	"情修": {"name": "红尘护心", "desc": "2件护心成形；3件让利生缘；4件共担回流；5件红尘归一。", "mechanic": "让与承劫转护心", "opening": "让与承灾转化为护心", "mastery": "红尘归一，护心受击后回流", "stages": {1: "红尘护心：让机缘、承灾会凝成护心，先保命再发育", 2: "善因生缘：让、扛、救人收益更高，灵力和回血更稳", 3: "共担回流：护心被打碎时返还一部分气血与灵力", 4: "红尘归一：护心容量提高，受击回流增强，后期拖局能力质变"}, "bonuses": {"防御力": 0.05, "灵力获取": 0.05, "每轮回血": 0.02}},
+	"丹修": {"name": "九转丹息", "desc": "2件丹息续命；3件炼丹增益；4件药力回转；5件九转大成。", "mechanic": "濒危自动续命", "opening": "濒危时丹息护命", "mastery": "九转大成，每战可多续一次命", "stages": {1: "丹息护命：濒危时自动吊住一口气，避免被一波带走", 2: "炉火温养：炼丹、回血收益提高，续航更稳定", 3: "药力回转：回血会反哺灵力，突破前更容易攒够修为", 4: "九转大成：一场战斗可多续一次命，回血与灵力获取质变"}, "bonuses": {"气血上限": 0.06, "每轮回血": 0.04, "灵力获取": 0.03}},
+	"阵修": {"name": "阵纹控场", "desc": "2件周旋布阵；3件阵纹减伤；4件困杀反制；5件阵心归一。", "mechanic": "周旋布阵减伤", "opening": "周旋时铺阵纹护身", "mastery": "阵心归一，阵纹上限提高", "stages": {1: "阵纹初布：周旋时铺阵纹护身，降低本轮承伤", 2: "阵势成局：阵纹层数提高，防御和战斗减伤更明显", 3: "困杀反制：阵纹会反制进攻者，拖局越久越占便宜", 4: "阵心归一：阵纹上限提高，双扛与周旋时减伤质变"}, "bonuses": {"防御力": 0.07, "战斗减伤": 0.05}},
+	"符修": {"name": "符步闪身", "desc": "2件符步闪身；3件疾符先手；4件闪避回刺；5件符意归一。", "mechanic": "周旋触发闪避", "opening": "周旋时符步闪避", "mastery": "符意归一，闪避上限和回刺提高", "stages": {1: "符步闪身：周旋时额外闪避，成功后符印成长", 2: "疾符先手：速度和闪避提高，更容易躲开关键伤害", 3: "闪避回刺：成功闪避后反打一次，低战力也有反扑点", 4: "符意归一：闪避上限提高，回刺伤害和触发稳定性增强"}, "bonuses": {"闪避率": 0.06, "速度": 0.05}},
+	"器修": {"name": "器魂共鸣", "desc": "2件器魂反哺；3件特效联动；4件觉醒加速；5件器魂归一。", "mechanic": "法宝特效带成长", "opening": "法宝特效触发时反哺成长", "mastery": "器魂归一，抢攻稳定涨法宝", "stages": {1: "器魂反哺：法宝特效触发时额外获得成长", 2: "多宝联动：法宝特效概率提高，攻击和暴击更稳定", 3: "觉醒加速：法宝成长速度提高，更快触发觉醒技能", 4: "器魂归一：抢攻稳定涨法宝，特效连锁爆发明显增强"}, "bonuses": {"攻击力": 0.04, "暴击率": 0.03}, "specials": {"treasure_growth_speed": 0.10, "treasure_effect_chance": 0.05}},
 }
 const CULTIVATION_BOND_MULTIPLIERS := {
 	1: 0.65,
@@ -6340,8 +6340,7 @@ func _refresh_cultivation_bond_state(player: PlayerData) -> void:
 func _cultivation_bond_announcement_data(player: PlayerData, cultivation_type: String, level: int) -> Dictionary:
 	var bond: Dictionary = CULTIVATION_BOND_DATA.get(cultivation_type, {}) as Dictionary
 	var stage_text: String = "质变" if level < 4 else "大成质变"
-	var effect_key: String = "opening" if level < 4 else "mastery"
-	var effect_text: String = str(bond.get(effect_key, bond.get("mechanic", "构筑机制生效")))
+	var effect_text: String = _cultivation_bond_stage_mechanic_text(cultivation_type, level)
 	return {
 		"player_name": player.player_name if player != null else "",
 		"peer_id": player.peer_id if player != null else 0,
@@ -6354,6 +6353,18 @@ func _cultivation_bond_announcement_data(player: PlayerData, cultivation_type: S
 		"duration": 2.6 if level < 4 else 3.4,
 		"color": _sect_color_hex(cultivation_type, level),
 	}
+
+
+func _cultivation_bond_stage_mechanic_text(cultivation_type: String, level: int) -> String:
+	var bond: Dictionary = CULTIVATION_BOND_DATA.get(cultivation_type, {}) as Dictionary
+	var stages: Dictionary = bond.get("stages", {}) as Dictionary
+	if stages.has(level):
+		return str(stages.get(level, ""))
+	if level == 1:
+		return str(bond.get("opening", bond.get("mechanic", "构筑机制生效")))
+	if level >= 4:
+		return str(bond.get("mastery", "大成质变"))
+	return str(bond.get("mechanic", "机制强化"))
 
 
 func _maybe_emit_cultivation_bond_announcement(player: PlayerData, cultivation_type: String, new_level: int) -> String:
@@ -6630,6 +6641,9 @@ func get_affix_description_lines(sect_name: String) -> Array[String]:
 		lines.append(str(bond.get("desc", "")))
 		if str(bond.get("mechanic", "")) != "":
 			lines.append("机制：" + str(bond.get("mechanic", "")))
+		lines.append("阶段：")
+		for level in range(1, 5):
+			lines.append(str(level + 1) + "件 " + _cultivation_bond_level_name(level) + "：" + _cultivation_bond_stage_mechanic_text(sect_name, level))
 		var bonuses: Dictionary = bond.get("bonuses", {}) as Dictionary
 		if not bonuses.is_empty():
 			lines.append("基础加成：" + _set_bonus_effect_summary(bonuses))
@@ -6717,14 +6731,7 @@ func _cultivation_bond_stage_lines(cultivation_type: String, route: Dictionary) 
 		if special_text != "":
 			effect_text += "、" + special_text
 		var mechanic_text: String = ""
-		if level == 1:
-			mechanic_text = str(bond_data.get("opening", bond_data.get("mechanic", "")))
-		elif level == 4:
-			mechanic_text = str(bond_data.get("mastery", "大成质变"))
-		elif level == 2:
-			mechanic_text = "机制强化一段"
-		elif level == 3:
-			mechanic_text = "机制强化二段"
+		mechanic_text = _cultivation_bond_stage_mechanic_text(cultivation_type, level)
 		if mechanic_text != "":
 			effect_text = mechanic_text + "；" + effect_text
 		var stage_label: String = str(need_count) + "件"
