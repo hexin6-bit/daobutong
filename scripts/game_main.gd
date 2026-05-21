@@ -3392,11 +3392,11 @@ func _simplify_calamity_extra_message(message: String) -> String:
 			var bond_prefix: String = "同伴羁绊 +" if part.contains("同伴羁绊 +") else "羁绊 +"
 			var bond: int = _extract_first_amount_after(part, bond_prefix)
 			if bond > 0:
-				extras.append("同伴羁绊+" + str(bond))
+				extras.append("同伴情义加深")
 		elif part.contains("羁绊 -"):
 			var bond_loss: int = _extract_first_amount_after(part, "羁绊 -")
 			if bond_loss > 0:
-				extras.append("同伴羁绊-" + str(bond_loss))
+				extras.append("同伴略有疏离")
 		elif part.contains("伤害减轻"):
 			extras.append(part)
 		elif part.contains("胜出") or part.contains("落败") or part.contains("斗法"):
@@ -3412,12 +3412,12 @@ func _looks_like_companion_bond_story(part: String) -> bool:
 
 func _compact_companion_bond_story(part: String) -> String:
 	var name_source: String = str(part.split("（", false)[0]).strip_edges()
-	var delta: int = _extract_first_amount_after(part, " +")
-	if delta > 0:
-		return name_source + "+" + str(delta)
-	delta = _extract_first_amount_after(part, " -")
-	if delta > 0:
-		return name_source + "-" + str(delta)
+	if name_source.contains(" +"):
+		name_source = str(name_source.split(" +", false)[0]).strip_edges()
+		return name_source + "情义加深"
+	if name_source.contains(" -"):
+		name_source = str(name_source.split(" -", false)[0]).strip_edges()
+		return name_source + "略有疏离"
 	return name_source
 
 
