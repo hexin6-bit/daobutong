@@ -159,12 +159,12 @@ func _companion_full_bonus_value(companion: Dictionary) -> float:
 
 
 func _technique_effect_multiplier(technique: Dictionary) -> float:
-	var realm_multiplier: float = 1.0
+	var realm_multiplier: float = 1.2
 	match str(technique.get("technique_realm", "初窥")):
 		"初窥":
-			realm_multiplier = 0.5
+			realm_multiplier = 0.6
 		"大成":
-			realm_multiplier = 1.5
+			realm_multiplier = 2.0
 	var quality_multiplier: float = float(technique.get("quality_multiplier", _technique_quality_multiplier(str(technique.get("quality", "金丹级")))))
 	return realm_multiplier * quality_multiplier
 

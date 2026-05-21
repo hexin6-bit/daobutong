@@ -11683,10 +11683,19 @@ func _battle_state_data(extra: Dictionary = {}) -> Dictionary:
 
 
 func _get_player_max_hp(player: PlayerData) -> int:
+	if player == null:
+		return 1
+	var realm_data: Dictionary = REALMS.get(player.realm, REALMS["炼气期"]) as Dictionary
+	var realm_hp_multiplier: float = 1.0 + float(realm_data.get("hp_bonus", 0.0))
 	var hp_bonus: float = _sum_player_bonus(player, "气血上限")
+	hp_bonus += _sum_player_bonus(player, "全属性")
 	hp_bonus += _body_school_hp_bonus(player)
 	hp_bonus += _emotion_school_hp_bonus(player)
-	return maxi(1, int(round(100.0 * (1.0 + float(player.stats.get("体魄", 0)) * 0.04 + hp_bonus))))
+	return maxi(1, int(round(100.0 * realm_hp_multiplier * (1.0 + float(player.stats.get("体魄", 0)) * 0.04 + hp_bonus))))
+
+
+func get_player_max_hp(player: PlayerData) -> int:
+	return _get_player_max_hp(player)
 
 
 func _heal_player_percent(player: PlayerData, pct: float) -> int:

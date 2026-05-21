@@ -339,11 +339,11 @@ func _update_battle_info(data: Dictionary, animate: bool) -> void:
 		label_log.text = "战斗数据同步中..."
 		_set_buttons_enabled(false)
 		return
-	my_hp_max = maxi(my_hp_max, my_player.qi_xue)
-	other_hp_max = maxi(other_hp_max, other_player.qi_xue)
+	my_hp_max = maxi(maxi(my_hp_max, my_player.qi_xue), GameManager.get_player_max_hp(my_player))
+	other_hp_max = maxi(maxi(other_hp_max, other_player.qi_xue), GameManager.get_player_max_hp(other_player))
 
-	label_my_hp.text = "我的气血：" + str(my_player.qi_xue)
-	label_other_hp.text = "对方气血：" + str(other_player.qi_xue)
+	label_my_hp.text = "我的气血：" + str(my_player.qi_xue) + "/" + str(my_hp_max)
+	label_other_hp.text = "对方气血：" + str(other_player.qi_xue) + "/" + str(other_hp_max)
 	if not enemy.is_empty():
 		var escape_chance: int = int(round(GameManager.get_escape_success_chance(my_player) * 100.0))
 		label_my_hp.text += "｜逃跑 " + str(escape_chance) + "%"

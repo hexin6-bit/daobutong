@@ -2808,8 +2808,9 @@ func _realm_ling_li_req(realm: String) -> int:
 
 
 func _estimate_player_max_hp(player: PlayerData) -> int:
-	var hp_bonus: float = float(player.refined_bonuses.get("气血上限", 0.0))
-	return maxi(1, int(round(100.0 * (1.0 + float(player.stats.get("体魄", 0)) * 0.04 + hp_bonus))))
+	if player == null:
+		return 1
+	return maxi(player.qi_xue, GameManager.get_player_max_hp(player))
 
 
 func _update_backpack_block_label(player: PlayerData) -> void:
