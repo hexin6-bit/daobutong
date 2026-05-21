@@ -3294,19 +3294,19 @@ func _apply_build_growth_from_bargain(player: PlayerData, result: Dictionary, ca
 	if ghost_route_level >= 1 and card_type == "机缘" and choice == "抢" and gain > 0.0:
 		var ghost_gain: int = 2 + ghost_route_level
 		player.final_attributes["ghost_power"] = int(player.final_attributes.get("ghost_power", 0)) + ghost_gain
-		messages.append("役鬼吞缘，鬼魂+" + str(ghost_gain))
+		messages.append("鬼修构筑：鬼魂+" + str(ghost_gain) + "（提高役鬼助战和护魂）")
 	var emotion_route_level: int = _cultivation_route_level(player, "情修")
 	if emotion_route_level >= 1 and choice == "让":
 		var heart_gain: int = 4 + emotion_route_level * 3 + int(round(_cultivation_route_strength(player, "情修") * 2.0))
 		var current_heart: int = int(player.final_attributes.get("heart_guard", 0))
 		var max_heart: int = 24 + emotion_route_level * 10
 		player.final_attributes["heart_guard"] = clampi(current_heart + heart_gain, 0, max_heart)
-		messages.append("红尘护心+" + str(heart_gain))
+		messages.append("情修构筑：护心+" + str(heart_gain) + "（后续抵伤）")
 	var dan_route_level: int = _cultivation_route_level(player, "丹修")
 	if dan_route_level >= 1 and effect_type == "dan" and gain > 0.0:
 		var reserve: int = clampi(int(player.final_attributes.get("dan_life_reserve", 0)) + 1, 0, 3 + dan_route_level)
 		player.final_attributes["dan_life_reserve"] = reserve
-		messages.append("丹炉蓄火+" + str(reserve))
+		messages.append("丹修构筑：丹息储量" + str(reserve) + "（濒危续命）")
 	var technique_growth_messages: Array[String] = []
 	if card_type == "机缘" and choice == "抢" and gain > 0.0:
 		technique_growth_messages.append(_grow_techniques_for_cultivation(player, "鬼修", 1, "夺机缘"))

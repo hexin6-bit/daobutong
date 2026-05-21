@@ -3302,8 +3302,9 @@ func _result_panel_line(result: Dictionary, card: Dictionary) -> String:
 	if parts.is_empty():
 		return _empty_result_text(card, message)
 	message = _remove_duplicate_primary_message(message, primary_text)
+	message = _simplify_opportunity_extra_message(message)
 	if message != "":
-		parts.append(_shorten_result_message(message, 44))
+		parts.append(_shorten_result_message(message, 56))
 	return "，".join(parts)
 
 
@@ -3406,6 +3407,41 @@ func _simplify_calamity_extra_message(message: String) -> String:
 	return "，".join(extras)
 
 
+func _simplify_opportunity_extra_message(message: String) -> String:
+	var extras: Array[String] = []
+	for raw_part in message.split("；", false):
+		var part: String = str(raw_part).strip_edges()
+		if part == "":
+			continue
+		if part.contains("鬼修构筑："):
+			var amount: int = _extract_first_amount_after(part, "鬼魂+")
+			extras.append("鬼修：鬼魂+" + str(amount) + "（助战/护魂）" if amount > 0 else part)
+		elif part.contains("役鬼吞缘"):
+			var ghost_amount: int = _extract_first_amount_after(part, "鬼魂+")
+			extras.append("鬼修：鬼魂+" + str(ghost_amount) + "（助战/护魂）" if ghost_amount > 0 else "鬼修构筑增强")
+		elif part.contains("情修构筑："):
+			var heart_amount: int = _extract_first_amount_after(part, "护心+")
+			extras.append("情修：护心+" + str(heart_amount) + "（抵伤）" if heart_amount > 0 else part)
+		elif part.contains("红尘护心"):
+			var old_heart_amount: int = _extract_first_amount_after(part, "红尘护心+")
+			extras.append("情修：护心+" + str(old_heart_amount) + "（抵伤）" if old_heart_amount > 0 else "情修护心增强")
+		elif part.contains("丹修构筑："):
+			extras.append(part.replace("丹修构筑：", "丹修："))
+		elif part.contains("丹炉蓄火"):
+			var reserve: int = _extract_first_amount_after(part, "丹炉蓄火+")
+			extras.append("丹修：丹息储量" + str(reserve) + "（濒危续命）" if reserve > 0 else "丹修丹息增强")
+		elif part.contains("万魂殿夺机缘"):
+			var ling_li: int = _extract_first_amount_after(part, "灵力 +")
+			extras.append("宗门：灵力+" + str(ling_li) if ling_li > 0 else part)
+		elif _looks_like_companion_bond_story(part):
+			extras.append(_compact_companion_bond_story(part))
+		elif part.contains("功法《"):
+			extras.append(part)
+		else:
+			extras.append(part)
+	return "，".join(extras)
+
+
 func _looks_like_companion_bond_story(part: String) -> bool:
 	return part.contains("·") and (part.contains(" +") or part.contains(" -")) and (part.contains("萍水") or part.contains("同袍") or part.contains("知己") or part.contains("生死契") or part.contains("萍水同行") or part.contains("同道相契") or part.contains("莫逆知己") or part.contains("生死之交"))
 
@@ -3414,9 +3450,13 @@ func _compact_companion_bond_story(part: String) -> String:
 	var name_source: String = str(part.split("（", false)[0]).strip_edges()
 	if name_source.contains(" +"):
 		name_source = str(name_source.split(" +", false)[0]).strip_edges()
+		if name_source.contains("·"):
+			name_source = str(name_source.split("·", false)[0]).strip_edges()
 		return name_source + "情义加深"
 	if name_source.contains(" -"):
 		name_source = str(name_source.split(" -", false)[0]).strip_edges()
+		if name_source.contains("·"):
+			name_source = str(name_source.split("·", false)[0]).strip_edges()
 		return name_source + "略有疏离"
 	return name_source
 
