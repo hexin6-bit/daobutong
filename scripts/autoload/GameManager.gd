@@ -124,8 +124,8 @@ const BUILD_EFFECT_TYPES := ["technique", "treasure", "companion", "alchemy_mate
 const QUEST_EFFECT_TYPES := ["quest"]
 const BASE_SHOU_YUAN := 10
 const SHOU_YUAN_PER_TI_PO := 2
-const MARKET_CULTIVATION_COST := 180
-const MARKET_CULTIVATION_GAIN := 18
+const MARKET_CULTIVATION_COST := 260
+const MARKET_CULTIVATION_GAIN := 40
 const MARKET_HEAL_COST := 200
 const MARKET_HEAL_PCT := 0.30
 const MARKET_BACKPACK_COST := 500
@@ -134,6 +134,10 @@ const ALCHEMY_COMMON_COST := 180
 const ALCHEMY_DAN_COST_RATE := 0.70
 const ALCHEMY_HEAL_PCT := 0.18
 const ALCHEMY_LING_LI_GAIN := 20
+const ALCHEMY_QI_GATHERING_COST := 320
+const ALCHEMY_QI_GATHERING_GAIN := 58
+const ALCHEMY_QI_GATHERING_AID := 0.08
+const ALCHEMY_LONGEVITY_GAIN := 2
 const ALCHEMY_RELATED_STATS := ["气感", "机缘"]
 const REFINING_RELATED_STATS := ["体魄", "经商"]
 const DUEL_LING_LI_REQ := 3200
@@ -2211,7 +2215,8 @@ func get_breakthrough_success_chance(player: PlayerData, breakthrough_type: Stri
 	var base_chance: float = MAJOR_BREAKTHROUGH_BASE_CHANCE if breakthrough_type == "major" else MINOR_BREAKTHROUGH_BASE_CHANCE
 	var qi_gan_bonus: float = float(player.stats.get("气感", 0)) * BREAKTHROUGH_QI_GAN_CHANCE
 	var ji_yuan_bonus: float = float(player.stats.get("机缘", 0)) * BREAKTHROUGH_JI_YUAN_CHANCE
-	return clamp(base_chance + qi_gan_bonus + ji_yuan_bonus, 0.20, 0.95)
+	var aid_bonus: float = float(player.final_attributes.get("breakthrough_aid_chance", 0.0))
+	return clamp(base_chance + qi_gan_bonus + ji_yuan_bonus + aid_bonus, 0.20, 0.95)
 
 
 func _apply_breakthrough_failure(player: PlayerData, breakthrough_type: String) -> Dictionary:
@@ -8953,7 +8958,7 @@ func on_market_action_received(peer_id: int, data: Dictionary) -> void:
 		"dan":
 			message = buy_market_dan(player)
 		"alchemy":
-			message = perform_alchemy(player, str(data.get("grade", "good")))
+			message = perform_alchemy(player, str(data.get("grade", "good")), str(data.get("recipe", "auto")))
 		"refining":
 			message = perform_refining(player, str(data.get("grade", "good")))
 		"backpack":
@@ -8964,6 +8969,7 @@ func on_market_action_received(peer_id: int, data: Dictionary) -> void:
 	var update_data: Dictionary = _market_update_data(peer_id, message, {
 		"action": action,
 		"grade": str(data.get("grade", "")),
+		"recipe": str(data.get("recipe", "")),
 		"material_name": str(data.get("material_name", "")),
 	})
 	NetworkManager.send_message("market_updated", update_data)
@@ -9226,7 +9232,7 @@ func buy_market_cultivation(player: PlayerData) -> String:
 		return "灵石不足，修为兑换需要 " + str(MARKET_CULTIVATION_COST)
 	var before_stage: String = get_cultivation_stage_name(player)
 	player.ling_li += MARKET_CULTIVATION_GAIN
-	var message: String = _append_stage_change_to_message(player, before_stage, "坊市吐纳丹：修为 +" + str(MARKET_CULTIVATION_GAIN))
+	var message: String = _append_stage_change_to_message(player, before_stage, "吸收灵石吐纳：修为 +" + str(MARKET_CULTIVATION_GAIN))
 	var sword_message: String = _add_growth_sword_exp(player, maxi(1, int(round(float(MARKET_CULTIVATION_GAIN) / 20.0))), "坊市吐纳")
 	if sword_message != "":
 		message += "；" + sword_message
@@ -9270,12 +9276,14 @@ func buy_market_dan(player: PlayerData) -> String:
 	return "坊市购得" + dan_name if technique_message == "" else "坊市购得" + dan_name + "；" + technique_message
 
 
-func get_alchemy_status(player: PlayerData) -> Dictionary:
+func get_alchemy_status(player: PlayerData, recipe: String = "auto") -> Dictionary:
+	var recipe_id: String = _resolve_alchemy_recipe(player, recipe)
 	var status: Dictionary = {
 		"can": false,
 		"cost": 0,
 		"label": "炼丹",
 		"dan_name": "",
+		"recipe": recipe_id,
 		"material_name": "",
 		"material_count": 0,
 		"stat_score": _craft_stat_score(player, "alchemy"),
@@ -9294,15 +9302,78 @@ func get_alchemy_status(player: PlayerData) -> Dictionary:
 		status["reason"] = "缺少灵草"
 		return status
 	status["material_name"] = str(material.get("name", "灵草"))
-
-	var dan_name: String = _next_required_dan_name(player)
-	if dan_name != "" and not has_dan(player, dan_name):
-		status["label"] = "炼" + dan_name
-		status["dan_name"] = dan_name
-	else:
-		status["label"] = "炼回春丹"
+	match recipe_id:
+		"breakthrough":
+			var dan_name: String = _next_required_dan_name(player)
+			if dan_name == "":
+				status["reason"] = "暂不需要突破丹"
+				return status
+			if has_dan(player, dan_name):
+				status["reason"] = "已拥有" + dan_name
+				return status
+			status["label"] = "炼" + dan_name
+			status["dan_name"] = dan_name
+		"qi_gathering":
+			status["label"] = "炼聚气丹"
+			status["cost"] = ALCHEMY_QI_GATHERING_COST
+			if player.ling_shi < ALCHEMY_QI_GATHERING_COST:
+				status["reason"] = "聚气丹需灵石 " + str(ALCHEMY_QI_GATHERING_COST)
+				return status
+		"longevity":
+			status["label"] = "炼延寿丹"
+		_:
+			status["label"] = "炼回春丹"
 	status["can"] = true
 	return status
+
+
+func get_alchemy_recipe_options(player: PlayerData) -> Array[Dictionary]:
+	var options: Array[Dictionary] = []
+	for recipe_id in ["breakthrough", "qi_gathering", "longevity", "heal"]:
+		var status: Dictionary = get_alchemy_status(player, recipe_id)
+		var label: String = str(status.get("label", _alchemy_recipe_label(recipe_id)))
+		var cost: int = int(status.get("cost", 0))
+		var text: String = label
+		if recipe_id == "qi_gathering":
+			text += "：灵草+灵石，修为+" + str(ALCHEMY_QI_GATHERING_GAIN) + "起，突破率+" + str(int(round(ALCHEMY_QI_GATHERING_AID * 100.0))) + "%"
+		elif recipe_id == "longevity":
+			text += "：寿元+" + str(ALCHEMY_LONGEVITY_GAIN) + "起"
+		elif recipe_id == "heal":
+			text += "：回血并得少量修为"
+		elif recipe_id == "breakthrough":
+			text += "：补当前大境突破丹"
+		if cost > 0:
+			text += " / " + str(cost) + "灵石"
+		if not bool(status.get("can", false)):
+			text += "（" + str(status.get("reason", "不可炼")) + "）"
+		options.append({"id": recipe_id, "label": label, "text": text, "can": bool(status.get("can", false))})
+	return options
+
+
+func _resolve_alchemy_recipe(player: PlayerData, recipe: String) -> String:
+	if recipe in ["breakthrough", "qi_gathering", "longevity", "heal"]:
+		return recipe
+	if player != null:
+		var dan_name: String = _next_required_dan_name(player)
+		if dan_name != "" and not has_dan(player, dan_name):
+			return "breakthrough"
+		if player.shou_yuan <= 3:
+			return "longevity"
+		if player.ling_shi >= ALCHEMY_QI_GATHERING_COST:
+			return "qi_gathering"
+	return "heal"
+
+
+func _alchemy_recipe_label(recipe: String) -> String:
+	match recipe:
+		"breakthrough":
+			return "炼突破丹"
+		"qi_gathering":
+			return "炼聚气丹"
+		"longevity":
+			return "炼延寿丹"
+		_:
+			return "炼回春丹"
 
 
 func get_refining_status(player: PlayerData) -> Dictionary:
@@ -9337,14 +9408,19 @@ func get_refining_status(player: PlayerData) -> Dictionary:
 	return status
 
 
-func perform_alchemy(player: PlayerData, craft_grade: String = "good") -> String:
-	var status: Dictionary = get_alchemy_status(player)
+func perform_alchemy(player: PlayerData, craft_grade: String = "good", recipe: String = "auto") -> String:
+	var status: Dictionary = get_alchemy_status(player, recipe)
 	if not bool(status.get("can", false)):
 		var reason: String = str(status.get("reason", "暂时不能炼丹"))
 		return reason + "，先去抽灵草"
+	var recipe_id: String = str(status.get("recipe", _resolve_alchemy_recipe(player, recipe)))
 	var material: Dictionary = _consume_material(player, "alchemy")
 	if material.is_empty():
 		return "缺少灵草，无法开炉"
+	var ling_shi_cost: int = int(status.get("cost", 0))
+	if ling_shi_cost > 0 and not _spend_ling_shi(player, ling_shi_cost):
+		_store_material_data(player, material)
+		return "灵石不足，聚气丹需要 " + str(ling_shi_cost)
 
 	var grade: String = _normalize_craft_grade(craft_grade)
 	var quality: String = str(material.get("quality", "炼气级"))
@@ -9368,6 +9444,19 @@ func perform_alchemy(player: PlayerData, craft_grade: String = "good") -> String
 		var before_dan_stage: String = get_cultivation_stage_name(player)
 		player.ling_li += dan_ling_gain
 		messages.append(_append_stage_change_to_message(player, before_dan_stage, "丹香入脉，修为 +" + str(dan_ling_gain)))
+	elif recipe_id == "qi_gathering":
+		var grade_rate: float = 1.45 if grade == "perfect" else 1.0
+		var before_qi_stage: String = get_cultivation_stage_name(player)
+		var qi_gain: int = maxi(10, int(round(float(ALCHEMY_QI_GATHERING_GAIN) * power * grade_rate)))
+		player.ling_li += qi_gain
+		var aid: float = ALCHEMY_QI_GATHERING_AID * (1.45 if grade == "perfect" else 1.0) + maxi(0.0, power - 1.0) * 0.01
+		var old_aid: float = float(player.final_attributes.get("breakthrough_aid_chance", 0.0))
+		player.final_attributes["breakthrough_aid_chance"] = clampf(old_aid + aid, 0.0, 0.24)
+		messages.append(_append_stage_change_to_message(player, before_qi_stage, "聚气丹成，消耗灵石 " + str(ling_shi_cost) + "，修为 +" + str(qi_gain) + "，下次突破率 +" + str(int(round(aid * 100.0))) + "%"))
+	elif recipe_id == "longevity":
+		var years: int = maxi(1, int(round(float(ALCHEMY_LONGEVITY_GAIN) * power * (1.5 if grade == "perfect" else 1.0))))
+		player.shou_yuan += years
+		messages.append("延寿丹成，寿元 +" + str(years))
 	else:
 		var max_hp: int = _get_player_max_hp(player)
 		var old_hp: int = player.qi_xue
@@ -11993,6 +12082,7 @@ func _start_minor_breakthrough(player: PlayerData, peer_id: int, target_name: St
 
 	var cost: int = get_next_breakthrough_req(player)
 	var chance: float = get_breakthrough_success_chance(player, "minor")
+	player.final_attributes["breakthrough_aid_chance"] = 0.0
 	if rng.randf() > chance:
 		var fail_data: Dictionary = _apply_breakthrough_failure(player, "minor")
 		var fail_message: String = player.player_name + "冲击" + target_name + "失败，修为 -" + str(int(fail_data.get("ling_li_loss", 0))) + "，气血 -" + str(int(fail_data.get("hp_damage", 0)))
@@ -12286,6 +12376,7 @@ func settle_tribulation(peer_id: int, choice: String) -> void:
 		return
 
 	var breakthrough_chance: float = get_breakthrough_success_chance(pending_breakthrough_player, "major")
+	pending_breakthrough_player.final_attributes["breakthrough_aid_chance"] = 0.0
 	if rng.randf() > breakthrough_chance:
 		var fail_data: Dictionary = _apply_breakthrough_failure(pending_breakthrough_player, "major")
 		result["success"] = false

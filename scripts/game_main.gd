@@ -72,6 +72,7 @@ var discard_slot: InventoryDropSlot
 var backpack_list: ItemList
 var backpack_menu: PopupMenu
 var market_menu: PopupMenu
+var alchemy_menu: PopupMenu
 var treasure_list: ItemList
 var treasure_menu: PopupMenu
 var backpack_overlay_layer: Control
@@ -126,6 +127,7 @@ var crafting_perfect_zone: ColorRect
 var crafting_pointer: ColorRect
 var crafting_action_button: Button
 var crafting_mode: String = ""
+var crafting_recipe: String = "auto"
 var crafting_pointer_value: float = 0.0
 var crafting_pointer_dir: float = 1.0
 var crafting_speed: float = 0.82
@@ -809,6 +811,10 @@ func _build_my_info_panel() -> PanelContainer:
 	market_menu = PopupMenu.new()
 	market_menu.id_pressed.connect(_on_market_menu_pressed)
 	add_child(market_menu)
+
+	alchemy_menu = PopupMenu.new()
+	alchemy_menu.id_pressed.connect(_on_alchemy_menu_pressed)
+	add_child(alchemy_menu)
 
 	build_info_dialog = AcceptDialog.new()
 	build_info_dialog.title = "词条说明"
@@ -4801,7 +4807,7 @@ func _on_market_pressed() -> void:
 		return
 
 	market_menu.clear()
-	_add_market_item("吐纳丹：修为 +" + str(GameManager.MARKET_CULTIVATION_GAIN) + " / " + str(GameManager.MARKET_CULTIVATION_COST) + "灵石", 0, player.ling_shi < GameManager.MARKET_CULTIVATION_COST)
+	_add_market_item("吸收灵石：修为 +" + str(GameManager.MARKET_CULTIVATION_GAIN) + " / " + str(GameManager.MARKET_CULTIVATION_COST) + "灵石", 0, player.ling_shi < GameManager.MARKET_CULTIVATION_COST)
 	_add_market_item("疗伤：回复30%气血 / " + str(GameManager.MARKET_HEAL_COST) + "灵石", 1, player.ling_shi < GameManager.MARKET_HEAL_COST)
 
 	var dan_name: String = _next_market_dan_name(player)
@@ -4848,13 +4854,27 @@ func _on_market_menu_pressed(id: int) -> void:
 
 func _on_alchemy_pressed() -> void:
 	var player: PlayerData = _get_my_player()
-	if player != null:
-		var status: Dictionary = GameManager.get_alchemy_status(player)
-		if not bool(status.get("can", false)):
-			label_log.text = "日志：" + str(status.get("reason", "暂时不能炼丹"))
-			_update_alchemy_button(player)
-			return
-	_start_crafting_minigame("alchemy")
+	if player == null:
+		return
+	if alchemy_menu == null:
+		_start_crafting_minigame("alchemy")
+		return
+	alchemy_menu.clear()
+	var options: Array[Dictionary] = GameManager.get_alchemy_recipe_options(player)
+	for i in range(options.size()):
+		var option: Dictionary = options[i] as Dictionary
+		alchemy_menu.add_item(str(option.get("text", option.get("label", "炼丹"))), i)
+		alchemy_menu.set_item_metadata(i, str(option.get("id", "heal")))
+		alchemy_menu.set_item_disabled(i, not bool(option.get("can", false)))
+	alchemy_menu.position = get_viewport().get_mouse_position()
+	alchemy_menu.popup()
+
+
+func _on_alchemy_menu_pressed(id: int) -> void:
+	if alchemy_menu == null:
+		return
+	var recipe: String = str(alchemy_menu.get_item_metadata(id))
+	_start_crafting_minigame("alchemy", recipe)
 
 
 func _on_refining_pressed() -> void:
@@ -4878,15 +4898,16 @@ func _send_market_action(action: String, extra_data: Dictionary = {}) -> void:
 		NetworkManager.send_message("market_action", data)
 
 
-func _start_crafting_minigame(mode: String) -> void:
+func _start_crafting_minigame(mode: String, recipe: String = "auto") -> void:
 	var player: PlayerData = _get_my_player()
 	if player == null or crafting_layer == null:
 		return
-	var status: Dictionary = GameManager.get_alchemy_status(player) if mode == "alchemy" else GameManager.get_refining_status(player)
+	var status: Dictionary = GameManager.get_alchemy_status(player, recipe) if mode == "alchemy" else GameManager.get_refining_status(player)
 	if not bool(status.get("can", false)):
 		label_log.text = "日志：" + str(status.get("reason", "暂时不能开炉"))
 		return
 	crafting_mode = mode
+	crafting_recipe = str(status.get("recipe", recipe)) if mode == "alchemy" else "auto"
 	crafting_pointer_value = randf()
 	crafting_pointer_dir = 1.0 if randf() >= 0.5 else -1.0
 	var stat_score: int = int(status.get("stat_score", 0))
@@ -4896,10 +4917,11 @@ func _start_crafting_minigame(mode: String) -> void:
 	crafting_layer.visible = true
 	crafting_layer.move_to_front()
 	if crafting_title_label != null:
-		crafting_title_label.text = "开炉炼丹" if mode == "alchemy" else "开炉炼器"
+		crafting_title_label.text = str(status.get("label", "开炉炼丹")) if mode == "alchemy" else "开炉炼器"
 	if crafting_status_label != null:
 		var material_name: String = str(status.get("material_name", "灵草" if mode == "alchemy" else "矿材"))
-		crafting_status_label.text = "投入" + material_name + "。相关六维：" + str(status.get("stat_text", "")) + "=" + str(stat_score) + "，看准火候点「收火」，点空白处停手。"
+		var cost_text: String = "，灵石-" + str(int(status.get("cost", 0))) if int(status.get("cost", 0)) > 0 else ""
+		crafting_status_label.text = "投入" + material_name + cost_text + "。相关六维：" + str(status.get("stat_text", "")) + "=" + str(stat_score) + "，看准火候点「收火」，点空白处停手。"
 	if crafting_action_button != null:
 		crafting_action_button.text = "收火"
 		crafting_action_button.disabled = false
@@ -4971,7 +4993,7 @@ func _on_crafting_action_pressed() -> void:
 	var grade: String = _crafting_grade_from_pointer()
 	var action: String = "alchemy" if crafting_mode == "alchemy" else "refining"
 	var player: PlayerData = _get_my_player()
-	var status: Dictionary = GameManager.get_alchemy_status(player) if action == "alchemy" else GameManager.get_refining_status(player)
+	var status: Dictionary = GameManager.get_alchemy_status(player, crafting_recipe) if action == "alchemy" else GameManager.get_refining_status(player)
 	var material_name: String = str(status.get("material_name", "灵草" if action == "alchemy" else "矿材"))
 	crafting_running = false
 	if crafting_action_button != null:
@@ -4979,7 +5001,7 @@ func _on_crafting_action_pressed() -> void:
 	label_log.text = "日志：" + ("炉火正妙" if grade == "perfect" else ("火候已成" if grade == "good" else "炉火失衡"))
 	await _play_crafting_grade_feedback(grade, action)
 	_hide_crafting_overlay()
-	_send_market_action(action, {"grade": grade, "material_name": material_name})
+	_send_market_action(action, {"grade": grade, "recipe": crafting_recipe, "material_name": material_name})
 
 
 func _play_crafting_grade_feedback(grade: String, action: String) -> void:
@@ -5103,7 +5125,8 @@ func _show_crafting_result(data: Dictionary) -> void:
 	if result_toast == null:
 		return
 	var action: String = str(data.get("action", "alchemy"))
-	var title: String = "炼丹完成" if action == "alchemy" else "炼器完成"
+	var recipe: String = str(data.get("recipe", ""))
+	var title: String = _alchemy_result_title(recipe) if action == "alchemy" else "炼器完成"
 	var material_name: String = str(data.get("material_name", "灵草" if action == "alchemy" else "矿材"))
 	var grade_text: String = _crafting_grade_display(str(data.get("grade", "good")))
 	var message: String = str(data.get("message", "开炉完成"))
@@ -5131,6 +5154,20 @@ func _show_crafting_result(data: Dictionary) -> void:
 	tween.set_ease(Tween.EASE_OUT)
 	tween.tween_property(result_toast, "modulate:a", 1.0, 0.16)
 	tween.tween_property(result_toast, "scale", Vector2.ONE, 0.2)
+
+
+func _alchemy_result_title(recipe: String) -> String:
+	match recipe:
+		"breakthrough":
+			return "突破丹成"
+		"qi_gathering":
+			return "聚气丹成"
+		"longevity":
+			return "延寿丹成"
+		"heal":
+			return "回春丹成"
+		_:
+			return "炼丹完成"
 
 
 func _crafting_grade_display(grade: String) -> String:
@@ -5322,7 +5359,7 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 				lines.append("成色：操作越准、相关六维越高，品质越好")
 				lines.append("成长：高品质会提高法宝成长与器修功法收益")
 			else:
-				lines.append("用途：炼丹消耗，炼突破丹或回春丹")
+				lines.append("用途：炼丹消耗，可炼突破丹/聚气丹/延寿丹/回春丹")
 				lines.append("相关六维：气感 + 机缘")
 				lines.append("玩法：点炼丹开炉，蓝区成功，金区完美")
 				lines.append("成色：操作越准、相关六维越高，品质越好")
