@@ -141,7 +141,7 @@ const ALCHEMY_LONGEVITY_GAIN := 2
 const ALCHEMY_RELATED_STATS := ["气感", "机缘"]
 const REFINING_RELATED_STATS := ["体魄", "经商"]
 const DUEL_LING_LI_REQ := 3200
-const FINAL_DUEL_FORCE_ROUND := 30
+const FINAL_DUEL_FORCE_ROUND := 18
 const SECT_EVENT_ROUND_INTERVAL := 3
 const SECT_EVENT_CHOICE_SECONDS := 10.0
 const SECT_EVENT_PRIVATE_DRAW_COUNT := 5
@@ -11398,6 +11398,18 @@ func _active_battle_player_count() -> int:
 
 func _apply_battle_heavy_wounds() -> bool:
 	var changed: bool = false
+	var knocked_players: Array[PlayerData] = []
+	for player in [player_a, player_b]:
+		if player == null:
+			continue
+		if _is_battle_peer_escaped(player.peer_id):
+			continue
+		if player.qi_xue <= 0:
+			knocked_players.append(player)
+	if knocked_players.size() >= 2:
+		battle_log.append("二人同遭妖兽重创，气血俱断")
+		handle_player_death(knocked_players[0])
+		return true
 	for player in [player_a, player_b]:
 		if player == null:
 			continue
