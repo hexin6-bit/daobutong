@@ -5370,7 +5370,8 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 			var effective_bonuses: Dictionary = GameManager.get_technique_effective_bonuses(data)
 			if effective_bonuses.is_empty():
 				effective_bonuses = bonuses if not bonuses.is_empty() else base_bonuses
-			lines.append("定位：上场后提供1-2项专精属性")
+			var technique_primary_tag: String = str(data.get("primary_cultivation_tag", ""))
+			lines.append("定位：" + technique_primary_tag + "｜" + GameManager.get_cultivation_style_text(technique_primary_tag))
 			lines.append("修炼：" + realm + progress_text + stage_text)
 			lines.append("效果：" + _format_bonus_dict(effective_bonuses))
 			var next_realm: String = _next_technique_realm_name(realm)
@@ -5378,9 +5379,11 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 				lines.append("下境：" + next_realm + "后 " + _format_bonus_dict(GameManager.get_technique_effective_bonuses(data, next_realm)))
 			else:
 				lines.append("圆满：已发挥全部功效")
-			lines.append("升级：" + _format_technique_growth_hint(str(data.get("primary_cultivation_tag", ""))))
+			lines.append("升级：" + _format_technique_growth_hint(technique_primary_tag))
 		"treasure":
-			lines.append("定位：抢攻自动出手")
+			var treasure_primary_tag: String = str(data.get("primary_cultivation_tag", data.get("growth_type", "")))
+			lines.append("定位：" + treasure_primary_tag + "专属法宝｜" + GameManager.get_cultivation_style_text(treasure_primary_tag))
+			lines.append("出手：抢攻时自动攻击")
 			lines.append("攻击：+" + str(int(data.get("battle_damage", data.get("base_attack", 0)))) + "｜特效：" + _format_treasure_attack_effect(str(data.get("attack_effect", "未知"))))
 			if data.has("growth_value"):
 				lines.append("成长：" + str(data.get("growth_name", "成长")) + " " + str(int(data.get("growth_value", 0))) + " / " + str(int(data.get("awaken_threshold", data.get("growth_max", 0)))) + "｜" + ("已觉醒" if int(data.get("awakening_level", 0)) > 0 else "未觉醒"))
@@ -5393,7 +5396,6 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 				for effect in extra_effects:
 					extra_names.append(str(effect))
 				lines.append("附加：" + "，".join(extra_names))
-			var treasure_primary_tag: String = str(data.get("primary_cultivation_tag", ""))
 			var treasure_growth: Dictionary = GameManager.TREASURE_GROWTH.get(treasure_primary_tag, {}) as Dictionary
 			lines.append("升级：" + str(treasure_growth.get("trigger", _format_growth_behavior_hint(treasure_primary_tag))))
 		"companion":

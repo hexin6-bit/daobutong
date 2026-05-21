@@ -350,6 +350,17 @@ const TREASURE_AWAKEN_SKILLS := {
 	"器修": {"name": "器魂共鸣", "desc": "抢攻时器魂共鸣追加伤害", "damage_scale": 0.45},
 }
 
+const CULTIVATION_STYLE_TEXT := {
+	"鬼修": "役鬼吸血，以战养魂",
+	"体修": "血厚反震，重击显化法相",
+	"剑修": "抢攻连斩，暴击破防",
+	"情修": "让与承灾化护心，越拖越稳",
+	"丹修": "炼丹回血，濒危续命",
+	"阵修": "周旋铺阵，减伤控场",
+	"符修": "符步闪身，高速闪避反击",
+	"器修": "法宝成长，特效连锁爆发",
+}
+
 const TECHNIQUE_REALM_FRAGMENT_REQ := {"初窥": 3, "小成": 6}
 const TECHNIQUE_STAGE_MULTIPLIERS := {"初窥": 0.6, "小成": 1.2, "大成": 2.0}
 const TECHNIQUE_DUPLICATE_FRAGMENT_PROGRESS := 3
@@ -587,6 +598,26 @@ const TREASURE_POOL := [
 	{"name": "聚灵幡", "quality": "金丹级", "school": "散修", "attack_name": "聚灵冲击", "battle_damage": 2, "duel_damage": 6, "passive_bonus": {"灵力获取": 0.16}, "use_effect": "装备后聚灵成刃，修行更快"},
 	{"name": "定魂钟", "quality": "元婴级", "school": "散修", "attack_name": "定魂钟波", "battle_damage": 2, "duel_damage": 8, "battle_hurt_reduction": 0.08, "passive_bonus": {"气血上限": 0.12}, "use_effect": "装备后稳住魂魄，天劫更稳"},
 	{"name": "飞仙羽", "quality": "元婴级", "school": "散修", "attack_name": "飞羽切风", "battle_damage": 3, "duel_damage": 9, "passive_bonus": {"速度": 18}, "use_effect": "装备后身法大增，逃跑更稳"},
+	{"name": "幽都魂灯", "quality": "元婴级", "growth_type": "鬼修", "attack_name": "幽灯摄魄", "attack_effect": "吸血", "extra_attack_effects": ["破甲"], "use_effect": "鬼修专属，抢攻摄魂吸血。"},
+	{"name": "大罗金身像", "quality": "化神级", "growth_type": "体修", "attack_name": "金身镇压", "attack_effect": "连击", "extra_attack_effects": ["破甲"], "use_effect": "体修专属，以法相镇压敌人。"},
+	{"name": "天河剑匣", "quality": "化神级", "growth_type": "剑修", "attack_name": "剑河倾落", "attack_effect": "连击", "extra_attack_effects": ["暴击加成"], "use_effect": "剑修专属，飞剑成河连续斩击。"},
+	{"name": "三生红绳", "quality": "元婴级", "growth_type": "情修", "attack_name": "红绳缚心", "attack_effect": "暴击加成", "extra_attack_effects": ["吸血"], "use_effect": "情修专属，以红尘因果护身缚敌。"},
+	{"name": "九转丹炉", "quality": "元婴级", "growth_type": "丹修", "attack_name": "丹火爆鸣", "attack_effect": "吸血", "extra_attack_effects": ["暴击加成"], "use_effect": "丹修专属，丹火伤敌并回补气血。"},
+	{"name": "星斗阵盘", "quality": "元婴级", "growth_type": "阵修", "attack_name": "星阵绞杀", "attack_effect": "破甲", "extra_attack_effects": ["连击"], "use_effect": "阵修专属，布星斗阵绞杀敌人。"},
+	{"name": "天雷符箓", "quality": "元婴级", "growth_type": "符修", "attack_name": "雷符疾落", "attack_effect": "暴击加成", "extra_attack_effects": ["连击"], "use_effect": "符修专属，符雷迅疾爆发。"},
+	{"name": "造化锻炉", "quality": "化神级", "growth_type": "器修", "attack_name": "炉火轰鸣", "attack_effect": "破甲", "extra_attack_effects": ["暴击加成"], "use_effect": "器修专属，炉火淬器破防爆发。"},
+	{"name": "青木药葫", "quality": "筑基级", "growth_type": "丹修", "attack_name": "药葫回旋", "attack_effect": "吸血", "use_effect": "丹修专属，药气回身。"},
+	{"name": "回春玉瓶", "quality": "金丹级", "growth_type": "丹修", "attack_name": "玉瓶丹霞", "attack_effect": "吸血", "extra_attack_effects": ["连击"], "use_effect": "丹修专属，丹霞连绵续命。"},
+	{"name": "太乙金丹鼎", "quality": "化神级", "growth_type": "丹修", "attack_name": "金鼎丹火", "attack_effect": "吸血", "extra_attack_effects": ["暴击加成"], "use_effect": "丹修专属，丹火越旺越能续战。"},
+	{"name": "八门阵旗", "quality": "筑基级", "growth_type": "阵修", "attack_name": "八门困杀", "attack_effect": "破甲", "use_effect": "阵修专属，起阵困敌。"},
+	{"name": "镇岳棋盘", "quality": "金丹级", "growth_type": "阵修", "attack_name": "棋落镇岳", "attack_effect": "连击", "extra_attack_effects": ["破甲"], "use_effect": "阵修专属，落子成阵。"},
+	{"name": "河洛天盘", "quality": "化神级", "growth_type": "阵修", "attack_name": "河洛天覆", "attack_effect": "破甲", "extra_attack_effects": ["连击"], "use_effect": "阵修专属，天盘覆压全局。"},
+	{"name": "追风符旗", "quality": "筑基级", "growth_type": "符修", "attack_name": "追风符刺", "attack_effect": "暴击加成", "use_effect": "符修专属，符风抢先。"},
+	{"name": "遁光符囊", "quality": "金丹级", "growth_type": "符修", "attack_name": "遁光连符", "attack_effect": "连击", "extra_attack_effects": ["暴击加成"], "use_effect": "符修专属，遁光连发。"},
+	{"name": "紫霄雷符", "quality": "化神级", "growth_type": "符修", "attack_name": "紫霄雷落", "attack_effect": "暴击加成", "extra_attack_effects": ["破甲"], "use_effect": "符修专属，雷符一落定胜负。"},
+	{"name": "百炼锤", "quality": "筑基级", "growth_type": "器修", "attack_name": "百炼重击", "attack_effect": "破甲", "use_effect": "器修专属，锤炼破防。"},
+	{"name": "玄铁机匣", "quality": "金丹级", "growth_type": "器修", "attack_name": "玄铁连发", "attack_effect": "连击", "extra_attack_effects": ["破甲"], "use_effect": "器修专属，机关连击。"},
+	{"name": "万炼神砧", "quality": "元婴级", "growth_type": "器修", "attack_name": "神砧震器", "attack_effect": "破甲", "extra_attack_effects": ["连击"], "use_effect": "器修专属，器魂震鸣。"},
 ]
 
 const COMPANION_POOL := [
@@ -5583,6 +5614,10 @@ func _make_cultivation_affix(cultivation_tag: String) -> Dictionary:
 		"specials": (bond.get("specials", {}) as Dictionary).duplicate(true),
 		"desc": str(bond.get("desc", "")) + " " + str(growth.get("trigger", "")),
 	}
+
+
+func get_cultivation_style_text(cultivation_tag: String) -> String:
+	return str(CULTIVATION_STYLE_TEXT.get(cultivation_tag, "按词条形成修行构筑"))
 
 
 func _find_cultivation_affix_tag(affixes: Array) -> String:
