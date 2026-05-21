@@ -4476,12 +4476,10 @@ func _apply_contest_yield_reward(settled: Dictionary, contest_result: Dictionary
 	var weak_player: PlayerData = _player_by_key(weak_key)
 	if weak_player == null:
 		return
-	var reward: int = _contest_yield_ling_li_reward(weak_player, card)
-	weak_player.ling_li += reward
 	weak_player.forbearance = clampi(weak_player.forbearance + 1, 0, MAX_FORBEARANCE)
 	var result_key: String = "player_a" if weak_key == "a" else "player_b"
 	var weak_result: Dictionary = settled.get(result_key, {}) as Dictionary
-	var message: String = "承劫感悟，修为 +" + str(reward) if str(card.get("type", "")) == "灾厄" else "放弃保底，修为 +" + str(reward)
+	var message: String = "承劫止损，隐忍 +1" if str(card.get("type", "")) == "灾厄" else "放弃争夺，隐忍 +1"
 	var target_key: String = "lose_message" if str(card.get("type", "")) == "灾厄" else "gain_message"
 	_append_result_message(weak_result, target_key, message)
 	settled[result_key] = weak_result
@@ -7166,6 +7164,17 @@ func _roll_treasure_attack_effect() -> String:
 	return str(TREASURE_ATTACK_EFFECTS[rng.randi_range(0, TREASURE_ATTACK_EFFECTS.size() - 1)])
 
 
+func _roll_different_treasure_attack_effect(current_effect: String) -> String:
+	var candidates: Array[String] = []
+	for effect in TREASURE_ATTACK_EFFECTS:
+		var effect_name: String = str(effect)
+		if effect_name != current_effect:
+			candidates.append(effect_name)
+	if candidates.is_empty():
+		return _roll_treasure_attack_effect()
+	return str(candidates[rng.randi_range(0, candidates.size() - 1)])
+
+
 func _treasure_attack_effect_desc(effect_name: String) -> String:
 	match effect_name:
 		"破甲":
@@ -7262,6 +7271,56 @@ func _refresh_treasure_growth_bonus(treasure: Dictionary) -> void:
 	treasure["duel_damage"] = effective_attack
 	treasure["passive_bonus"] = (treasure.get("affix_bonus", treasure.get("base_passive_bonus", {})) as Dictionary).duplicate(true)
 	treasure["use_effect"] = "抢攻时自动攻击，基础攻击+" + str(int(treasure.get("base_attack", 0))) + "，特效：" + str(treasure.get("attack_effect", ""))
+
+
+func _treasure_tag_summary(treasure: Dictionary) -> String:
+	var tags: Array[String] = _item_cultivation_tags(treasure)
+	if tags.is_empty():
+		return str(treasure.get("primary_cultivation_tag", treasure.get("growth_type", "未定")))
+	return "、".join(tags)
+
+
+func _reforge_treasure_with_material(player: PlayerData, treasure: Dictionary, result_quality: String, craft_grade: String) -> String:
+	if player == null or treasure.is_empty():
+		return ""
+	_prepare_treasure(treasure, _player_sect(player))
+	var old_quality: String = str(treasure.get("quality", "炼气级"))
+	var old_effect: String = str(treasure.get("attack_effect", ""))
+	var old_tags: String = _treasure_tag_summary(treasure)
+	var current_rank: int = _quality_rank(old_quality)
+	var material_rank: int = _quality_rank(result_quality)
+	var target_rank: int = current_rank
+	var grade: String = _normalize_craft_grade(craft_grade)
+	if material_rank > current_rank:
+		if grade == "perfect":
+			target_rank = mini(material_rank, current_rank + 2)
+		elif grade == "good":
+			var chance: float = 0.45 + float(material_rank - current_rank) * 0.12 + float(_craft_stat_score(player, "refining")) * 0.015
+			if rng.randf() <= clampf(chance, 0.0, 0.92):
+				target_rank = mini(material_rank, current_rank + 1)
+	var new_quality: String = _quality_by_rank(target_rank)
+	treasure["quality"] = new_quality
+	treasure["attack_effect"] = _roll_different_treasure_attack_effect(old_effect)
+	var primary_tag: String = str(treasure.get("primary_cultivation_tag", _treasure_growth_type(treasure)))
+	if not CULTIVATION_TYPES.has(primary_tag):
+		primary_tag = _treasure_growth_type(treasure)
+	treasure["primary_cultivation_tag"] = primary_tag
+	treasure["affixes"] = _make_cultivation_affix_set(primary_tag, _quality_affix_count(new_quality), [])
+	treasure["affixes_applied"] = false
+	_prepare_treasure(treasure, _player_sect(player))
+	_apply_player_treasure_growth_cap(player, treasure)
+	var parts: Array[String] = []
+	if new_quality != old_quality:
+		parts.append("品质" + quality_display_name(old_quality) + "→" + quality_display_name(new_quality))
+	else:
+		parts.append("品质未变")
+	parts.append("特效" + old_effect + "→" + str(treasure.get("attack_effect", "")))
+	var new_tags: String = _treasure_tag_summary(treasure)
+	if new_tags != old_tags:
+		parts.append("词条" + old_tags + "→" + new_tags)
+	else:
+		parts.append("词条重炼为" + new_tags)
+	return "重炼法宝：" + "，".join(parts)
 
 
 func _collection_message(player: PlayerData, message: String) -> String:
@@ -8413,7 +8472,7 @@ func _material_name(material_type: String, quality: String) -> String:
 
 
 func _material_effect_desc(material_type: String) -> String:
-	return "炼器材料，用于淬炼上场法宝" if material_type == "craft" else "炼丹材料，用于开炉炼丹"
+	return "炼器材料，用于淬炼、重炼上场法宝" if material_type == "craft" else "炼丹材料，用于开炉炼丹"
 
 
 func _backpack_kind_count(player: PlayerData, kind: String) -> int:
@@ -9569,9 +9628,14 @@ func perform_refining(player: PlayerData, craft_grade: String = "good") -> Strin
 	var quality_bonus: int = maxi(0, _quality_rank(result_quality) - _quality_rank(quality))
 	growth_amount += quality_bonus
 	var messages: Array[String] = [_craft_grade_text(grade) + "，耗去" + str(material.get("name", "矿材")) + "；" + _craft_quality_message(craft_quality)]
+	var treasure: Dictionary = _get_equipped_treasure(player)
 	var treasure_message: String = grow_treasure(player, growth_amount)
 	if treasure_message != "":
 		messages.append(treasure_message)
+	if grade != "miss" and not treasure.is_empty():
+		var reforge_message: String = _reforge_treasure_with_material(player, treasure, result_quality, grade)
+		if reforge_message != "":
+			messages.append(reforge_message)
 	var technique_growth: int = (1 if grade != "perfect" else 2) + (1 if quality_bonus >= 2 else 0)
 	var technique_message: String = _grow_techniques_for_cultivation(player, "器修", technique_growth, "开炉炼器")
 	if technique_message != "":
@@ -10063,7 +10127,7 @@ func generate_desc(data: Dictionary, is_calamity: bool = false) -> String:
 		"alchemy_material":
 			return quality_text + " · 灵草：收入背包，可用于炼丹"
 		"craft_material":
-			return quality_text + " · 矿材：收入背包，可用于炼器"
+			return quality_text + " · 矿材：收入背包，可淬炼或重炼法宝"
 		"adventure":
 			return "秘境探索：可能获得修为、灵石、功法或法宝"
 		"body_tempering":

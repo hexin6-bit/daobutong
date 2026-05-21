@@ -2806,7 +2806,7 @@ func _update_refining_button(player: PlayerData) -> void:
 			refine_label = "缺矿材"
 	button_refining.text = refine_label + "\n矿 " + str(material_count)
 	button_refining.disabled = not bool(status.get("can", false))
-	button_refining.tooltip_text = "消耗矿材开炉炼器：体魄+经商会放宽火候并提升成色。"
+	button_refining.tooltip_text = "消耗矿材开炉炼器：淬炼成长，并重炼品质、特效和词条。体魄+经商会放宽火候。"
 	button_refining.modulate = Color("#f0c040") if bool(status.get("can", false)) else Color(0.65, 0.65, 0.7, 1.0)
 
 
@@ -3261,8 +3261,8 @@ func _bargain_judgement_text(my_choice: String, enemy_choice: String, card: Dict
 		if mode == "fight":
 			return "双方先抢，强行争夺 → " + _shorten_result_message(message, 34)
 		if card_type == "灾厄":
-			return "双方先避，弱势方承劫 → 损失降低，并获得承劫感悟"
-		return "双方先抢，弱势方放弃 → 止损并获得保底"
+			return "双方先避，弱势方承劫 → 损失降低，隐忍+1"
+		return "双方先抢，弱势方放弃 → 止损，隐忍+1"
 	if card_type == "机缘":
 		if my_choice == "抢" and enemy_choice == "抢":
 			return "双方都抢 → 这张牌破碎，谁也拿不到"
@@ -3386,7 +3386,7 @@ func _simplify_calamity_extra_message(message: String) -> String:
 		if part.contains("修为 +"):
 			var amount: int = _extract_first_amount_after(part, "修为 +")
 			if amount > 0:
-				extras.append("承劫感悟：修为+" + str(amount))
+				extras.append("修为+" + str(amount))
 		elif part.contains("气血 +"):
 			var heal: int = _extract_first_amount_after(part, "气血 +")
 			if heal > 0:
@@ -4922,7 +4922,8 @@ func _start_crafting_minigame(mode: String, recipe: String = "auto") -> void:
 	if crafting_status_label != null:
 		var material_name: String = str(status.get("material_name", "灵草" if mode == "alchemy" else "矿材"))
 		var cost_text: String = "，灵石-" + str(int(status.get("cost", 0))) if int(status.get("cost", 0)) > 0 else ""
-		crafting_status_label.text = "投入" + material_name + cost_text + "。相关六维：" + str(status.get("stat_text", "")) + "=" + str(stat_score) + "，看准火候点「收火」，点空白处停手。"
+		var crafting_purpose: String = "炼丹" if mode == "alchemy" else "淬炼并重炼法宝"
+		crafting_status_label.text = "投入" + material_name + cost_text + "，" + crafting_purpose + "。相关六维：" + str(status.get("stat_text", "")) + "=" + str(stat_score) + "，看准火候点「收火」，点空白处停手。"
 	if crafting_action_button != null:
 		crafting_action_button.text = "收火"
 		crafting_action_button.disabled = false
@@ -5053,11 +5054,11 @@ func _crafting_grade_detail(grade: String, action: String) -> String:
 	var target_name: String = "丹成" if action == "alchemy" else "器鸣"
 	match grade:
 		"perfect":
-			return "收火极准，" + target_name + "上品。"
+			return "收火极准，" + target_name + ("上品。" if action == "alchemy" else "上品，重炼更稳。")
 		"miss":
 			return "火势偏乱，只留残火收益。"
 		_:
-			return "收火稳当，" + target_name + "可用。"
+			return "收火稳当，" + target_name + ("可用。" if action == "alchemy" else "可用，法宝重炼。")
 
 
 func _crafting_art_result_text(grade: String, action: String) -> String:
@@ -5354,11 +5355,11 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 		"material":
 			var material_type: String = str(data.get("material_type", "alchemy"))
 			if material_type == "craft":
-				lines.append("用途：炼器消耗，淬炼上场法宝")
+				lines.append("用途：炼器消耗，淬炼并重炼上场法宝")
 				lines.append("相关六维：体魄 + 经商")
 				lines.append("玩法：点炼器开炉，蓝区成功，金区完美")
-				lines.append("成色：操作越准、相关六维越高，品质越好")
-				lines.append("成长：高品质会提高法宝成长与器修功法收益")
+				lines.append("成色：操作越准、相关六维越高，提品越稳")
+				lines.append("重炼：改变特效和词条，高品质矿材可提升法宝品质")
 			else:
 				lines.append("用途：炼丹消耗，可炼突破丹/聚气丹/延寿丹/回春丹")
 				lines.append("相关六维：气感 + 机缘")
