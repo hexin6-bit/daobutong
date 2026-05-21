@@ -1980,6 +1980,16 @@ func resume_loaded_state_after_scene_ready() -> void:
 				duel_prepared.emit(duel_data.duplicate(true))
 		GameState.SECT_EVENT:
 			sect_event_started.emit(_sect_event_state_data(str(current_sect_event.get("message", "宗门事件继续。"))))
+			if NetworkManager.is_host and str(current_sect_event.get("phase", "choice")) == "choice":
+				var sect_event_ready_to_resolve: bool = true
+				for event_peer_id in _sect_event_peer_ids():
+					if not sect_event_choices.has(str(event_peer_id)):
+						sect_event_ready_to_resolve = false
+						break
+				if sect_event_ready_to_resolve:
+					_try_resolve_sect_event()
+				else:
+					_queue_sect_event_choice_timeout(int(current_sect_event.get("id", 0)))
 
 
 func _loaded_bargain_points_to_hidden_card() -> bool:
@@ -3461,8 +3471,16 @@ func on_bargain_choice_received(peer_id: int, data: Dictionary) -> void:
 	var index: int = int(data.get("index", current_card_index))
 	if index < 0 or index >= current_lottery_cards.size() or index != current_card_index or choice == "":
 		return
+	var choice_peer_id: int = peer_id
+	if choice_peer_id <= 0:
+		choice_peer_id = 1
+	if has_pending_backpack_item(choice_peer_id):
+		var block_data: Dictionary = _backpack_update_data(choice_peer_id, "先处理背包里的新物品")
+		NetworkManager.send_message("backpack_updated", block_data)
+		on_backpack_updated(block_data)
+		return
 
-	var player_key: String = "a" if peer_id == player_a.peer_id else "b"
+	var player_key: String = "a" if choice_peer_id == player_a.peer_id else "b"
 	bargain_choices[player_key] = choice
 	var card: Dictionary = current_lottery_cards[current_card_index]
 	if single_player_mode and player_key == "a" and not bargain_choices.has("b"):
