@@ -5335,6 +5335,13 @@ func _free_dialog_by_id(dialog_id: int) -> void:
 		(dialog_object as Node).queue_free()
 
 
+func _format_companion_bond_growth_hint(companion: Dictionary) -> String:
+	var alignment: String = GameManager.get_companion_alignment(companion)
+	if alignment == "正":
+		return "让机缘+6，扛天劫+10，双方都让+6；抢机缘-1，躲天劫-1"
+	return "抢机缘+6，抢攻+4，击杀妖兽+10；让机缘-1，扛天劫-1"
+
+
 func _describe_inventory_entry(entry: Dictionary, source: String, index: int) -> String:
 	var kind: String = str(entry.get("kind", ""))
 	var data: Dictionary = entry.get("data", {}) as Dictionary
@@ -5391,6 +5398,9 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 		"companion":
 			var bond_value: int = int(data.get("bond", 0))
 			var bond_max: int = GameManager.get_companion_bond_max(data)
+			var bond_growth_hint: String = _format_companion_bond_growth_hint(data)
+			if bond_growth_hint != "":
+				lines.append("好感提升：" + bond_growth_hint)
 			lines.append("定位：被动加成 + 宗门身份")
 			lines.append("门派：" + GameManager.get_companion_sect(data) + "｜阵营：" + GameManager.get_companion_alignment(data))
 			lines.append("被动：" + str(data.get("effect_desc", str(data.get("bonus_type", "")) + " " + str(data.get("bonus_value", "")))))
