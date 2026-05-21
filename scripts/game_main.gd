@@ -2597,11 +2597,15 @@ func _restart_resonance_badge_effect(label: Label, level: int) -> void:
 
 
 func _get_my_player() -> PlayerData:
-	return GameManager.player_a if NetworkManager.is_host else GameManager.player_b
+	return GameManager.player_a if _uses_player_a_view() else GameManager.player_b
 
 
 func _get_enemy_player() -> PlayerData:
-	return GameManager.player_b if NetworkManager.is_host else GameManager.player_a
+	return GameManager.player_b if _uses_player_a_view() else GameManager.player_a
+
+
+func _uses_player_a_view() -> bool:
+	return NetworkManager.is_host or GameManager.single_player_mode or not NetworkManager.connected
 
 
 func _on_npc_dialogue_changed(line: String) -> void:

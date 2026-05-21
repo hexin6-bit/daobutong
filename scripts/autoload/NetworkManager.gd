@@ -70,6 +70,15 @@ func stop_network() -> void:
 	connected = false
 
 
+func prepare_offline_host_resume() -> void:
+	if peer != null:
+		peer.close()
+	peer = null
+	multiplayer.multiplayer_peer = null
+	is_host = true
+	connected = false
+
+
 @rpc("any_peer", "reliable")
 func _receive_message(msg: String) -> void:
 	var json := JSON.new()

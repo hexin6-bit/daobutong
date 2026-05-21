@@ -269,6 +269,8 @@ func _on_npc_selected(npc_id: String) -> void:
 
 func _on_continue_pressed() -> void:
 	label_status.text = "正在读取存档..."
+	if NetworkManager.has_method("prepare_offline_host_resume"):
+		NetworkManager.prepare_offline_host_resume()
 	if not GameManager.load_game_from_disk(true):
 		label_status.text = "没有找到可继续的存档"
 		button_continue.visible = false

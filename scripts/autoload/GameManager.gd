@@ -1826,7 +1826,7 @@ func load_game_from_disk(sync_network: bool = true) -> bool:
 	if not parsed is Dictionary:
 		return false
 	_restore_save_payload(parsed as Dictionary)
-	if sync_network and NetworkManager.is_host:
+	if sync_network and NetworkManager.is_host and NetworkManager.connected:
 		NetworkManager.send_message("save_sync", parsed as Dictionary)
 	transition_to_scene(_scene_for_state(current_state))
 	return true
@@ -1925,6 +1925,8 @@ func _restore_save_payload(data: Dictionary) -> void:
 		player_a.peer_id = 1
 	if player_b.peer_id <= 0:
 		player_b.peer_id = 2
+	if not NetworkManager.connected:
+		NetworkManager.is_host = true
 	round_number = int(data.get("round_number", 0))
 	round_started = bool(data.get("round_started", false))
 	current_lottery_results = (data.get("current_lottery_results", []) as Array).duplicate(true)
