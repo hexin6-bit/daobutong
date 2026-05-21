@@ -180,6 +180,9 @@ const MULTI_ENEMY_MIN_REALM_RANK := 1
 const MULTI_ENEMY_BASE_CHANCE := 0.18
 const MULTI_ENEMY_REALM_CHANCE := 0.10
 const MULTI_ENEMY_REWARD_SCALE := 0.55
+const BATTLE_LING_LI_ROUND_SCALE_START := 6
+const BATTLE_LING_LI_ROUND_SCALE_STEP := 0.06
+const BATTLE_LING_LI_ROUND_SCALE_CAP := 1.75
 const BASE_CRIT_CHANCE := 0.05
 const CRIT_DAMAGE_MULTIPLIER := 1.5
 const BASE_DODGE_CHANCE := 0.03
@@ -11442,7 +11445,8 @@ func distribute_loot() -> void:
 	var was_elite: bool = enemy_elite
 	var enemy_count: int = maxi(1, int(current_enemy.get("enemy_count", 1)))
 	var pack_reward_scale: float = 1.0 + float(enemy_count - 1) * MULTI_ENEMY_REWARD_SCALE
-	var reward_ling_li: int = int(round(float(_enemy_ling_li_reward(str(current_enemy.get("quality", "元婴级")))) * pack_reward_scale))
+	var round_reward_scale: float = _enemy_ling_li_round_scale()
+	var reward_ling_li: int = int(round(float(_enemy_ling_li_reward(str(current_enemy.get("quality", "元婴级")))) * pack_reward_scale * round_reward_scale))
 	var reward_a: int = int(round(float(reward_ling_li) * share_a))
 	var reward_b: int = int(round(float(reward_ling_li) * share_b))
 	var reward_stones: int = int(round(float(_enemy_ling_shi_reward(enemy_quality)) * pack_reward_scale))
@@ -11467,6 +11471,8 @@ func distribute_loot() -> void:
 	var message: String = title + "，掉落：" + drop_desc + "。"
 	if enemy_count >= 2:
 		reward_lines.append("双妖围攻：基础收益 +" + str(int(round((pack_reward_scale - 1.0) * 100.0))) + "%")
+	if round_reward_scale > 1.01:
+		reward_lines.append("后期猎妖：修为收益 +" + str(int(round((round_reward_scale - 1.0) * 100.0))) + "%")
 	var sword_a_message: String = _add_growth_sword_exp(player_a, maxi(1, int(round(float(reward_a) / 10.0))), "斩妖")
 	var sword_b_message: String = _add_growth_sword_exp(player_b, maxi(1, int(round(float(reward_b) / 10.0))), "斩妖")
 	if sword_a_message != "":
@@ -11501,8 +11507,9 @@ func distribute_loot() -> void:
 			reward_lines.append(task_b_message)
 	if was_elite:
 		message += "；精英额外掉落"
-		var elite_ling_a: int = int(round(20.0 * share_a))
-		var elite_ling_b: int = int(round(20.0 * share_b))
+		var elite_ling_base: int = maxi(24, int(round(float(_enemy_ling_li_reward(enemy_quality)) * 0.28 * round_reward_scale)))
+		var elite_ling_a: int = int(round(float(elite_ling_base) * share_a))
+		var elite_ling_b: int = int(round(float(elite_ling_base) * share_b))
 		var elite_stones_a: int = int(round(80.0 * share_a))
 		var elite_stones_b: int = int(round(80.0 * share_b))
 		player_a.ling_li += elite_ling_a
@@ -11537,17 +11544,24 @@ func _enemy_ling_li_reward(quality: String) -> int:
 		"炼气级":
 			return 30
 		"筑基级":
-			return 50
+			return 60
 		"金丹级":
-			return 80
+			return 125
 		"元婴级":
-			return 120
+			return 210
 		"化神级":
-			return 180
+			return 330
 		"合体级":
-			return 260
+			return 500
 		_:
 			return 100
+
+
+func _enemy_ling_li_round_scale() -> float:
+	if round_number < BATTLE_LING_LI_ROUND_SCALE_START:
+		return 1.0
+	var extra_rounds: int = round_number - BATTLE_LING_LI_ROUND_SCALE_START + 1
+	return clampf(1.0 + float(extra_rounds) * BATTLE_LING_LI_ROUND_SCALE_STEP, 1.0, BATTLE_LING_LI_ROUND_SCALE_CAP)
 
 
 func _enemy_ling_shi_reward(quality: String) -> int:
