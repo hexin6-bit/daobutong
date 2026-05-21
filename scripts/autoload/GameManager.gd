@@ -140,6 +140,9 @@ const DUEL_LING_LI_REQ := 3200
 const SECT_EVENT_ROUND_INTERVAL := 3
 const SECT_EVENT_CHOICE_SECONDS := 10.0
 const SECT_EVENT_PRIVATE_DRAW_COUNT := 5
+const REALM_COMBAT_POWER_BONUS := [0, 60, 150, 280]
+const REALM_DUEL_ADVANTAGE_DAMAGE := 0.22
+const REALM_DUEL_SUPPRESSED_DAMAGE := 0.16
 const SPARRING_MAX_ACTIONS := 3
 const SPARRING_LOW_HP_RATE := 0.35
 const MINOR_STAGE_NAMES := ["一层", "二层", "三层", "四层", "五层", "六层", "七层", "八层", "九层"]
@@ -391,9 +394,9 @@ const BASE_STATS := ["体魄", "气感", "经商", "身法", "魅力", "机缘"]
 
 const REALMS := {
 	"炼气期": {"ling_li_req": 0, "attack_bonus": 0.0, "defense_bonus": 0.0, "hp_bonus": 0.0, "speed_base": 10, "dan": ""},
-	"筑基期": {"ling_li_req": 180, "attack_bonus": 0.20, "defense_bonus": 0.20, "hp_bonus": 0.20, "speed_base": 20, "dan": "筑基丹"},
-	"金丹期": {"ling_li_req": 760, "attack_bonus": 0.50, "defense_bonus": 0.40, "hp_bonus": 0.40, "speed_base": 30, "dan": "金丹"},
-	"元婴期": {"ling_li_req": 1800, "attack_bonus": 1.00, "defense_bonus": 0.80, "hp_bonus": 0.80, "speed_base": 40, "dan": "元婴丹"},
+	"筑基期": {"ling_li_req": 180, "attack_bonus": 0.45, "defense_bonus": 0.40, "hp_bonus": 0.45, "speed_base": 24, "dan": "筑基丹"},
+	"金丹期": {"ling_li_req": 760, "attack_bonus": 1.10, "defense_bonus": 0.90, "hp_bonus": 1.00, "speed_base": 42, "dan": "金丹"},
+	"元婴期": {"ling_li_req": 1800, "attack_bonus": 2.00, "defense_bonus": 1.60, "hp_bonus": 1.80, "speed_base": 64, "dan": "元婴丹"},
 }
 
 const TRIBULATIONS := {
@@ -3641,7 +3644,7 @@ func get_visible_combat_power(player: PlayerData) -> float:
 
 
 func get_visible_combat_power_formula_text() -> String:
-	return "战力 = 攻击×2 + 防御 + 当前气血×0.5 + 速度×0.2 + 法宝成长"
+	return "战力 = 攻击×2 + 防御 + 当前气血×0.5 + 速度×0.2 + 法宝成长 + 境界战力"
 
 
 func get_enemy_visible_combat_power(enemy: Dictionary = {}) -> float:
@@ -7320,6 +7323,8 @@ func calculate_duel_stats(player: PlayerData) -> Dictionary:
 		"当前气血": player.qi_xue,
 		"速度": final_speed,
 		"境界": player.realm,
+		"境界层级": _realm_rank(player.realm),
+		"境界战力": _realm_combat_power_bonus(player.realm),
 		"修为": player.ling_li,
 		"流派": _detect_player_school(player),
 		"构筑层级": build_level,
@@ -7341,7 +7346,7 @@ func calculate_duel_stats(player: PlayerData) -> Dictionary:
 		"伙伴列表": player.companions.duplicate(true),
 	}
 	stats["战力"] = _duel_combat_power_from_stats(stats)
-	stats["战力说明"] = get_visible_combat_power_formula_text() + "；修为只决定突破门槛，不直接等于战力。"
+	stats["战力说明"] = get_visible_combat_power_formula_text() + "；境界越高，基础攻防血和对决压制越强。"
 	return stats
 
 
@@ -7352,6 +7357,7 @@ func _duel_combat_power_from_stats(stats: Dictionary) -> int:
 		+ float(stats.get("当前气血", stats.get("气血", 0))) * 0.5
 		+ float(stats.get("法宝成长", 0))
 		+ float(stats.get("速度", 0)) * 0.2
+		+ float(stats.get("境界战力", 0))
 	))
 
 
@@ -7362,6 +7368,7 @@ func _duel_base_power_from_stats(stats: Dictionary) -> int:
 		+ float(stats.get("气血", 0)) * 0.5
 		+ float(stats.get("法宝成长", 0))
 		+ float(stats.get("速度", 0)) * 0.2
+		+ float(stats.get("境界战力", 0))
 	))
 
 
@@ -7448,6 +7455,17 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 		return {"damage": attack_value, "实际伤害": 0, "特殊效果触发列表": effects, "日志文字": dodge_log, "闪避": true, "暴击": false, "明细": detail_lines, "攻击方": attacker.player_name, "防守方": defender.player_name}
 
 	var damage: float = maxf(1.0, attack_value * (1.0 - defense_rate))
+	var realm_gap: int = int(attack_stats.get("境界层级", 0)) - int(defense_stats.get("境界层级", 0))
+	if realm_gap > 0:
+		var realm_advantage: float = REALM_DUEL_ADVANTAGE_DAMAGE * float(realm_gap)
+		damage *= 1.0 + realm_advantage
+		effects.append("境界压制+" + str(int(round(realm_advantage * 100.0))) + "%")
+		detail_lines.append("境界压制 +" + str(int(round(realm_advantage * 100.0))) + "%")
+	elif realm_gap < 0:
+		var realm_suppression: float = clampf(REALM_DUEL_SUPPRESSED_DAMAGE * float(abs(realm_gap)), 0.0, 0.55)
+		damage *= 1.0 - realm_suppression
+		effects.append("境界受制-" + str(int(round(realm_suppression * 100.0))) + "%")
+		detail_lines.append("境界受制 -" + str(int(round(realm_suppression * 100.0))) + "%")
 	damage *= 1.0 + clampf(float(defense_stats.get("因果", 0)) * 0.025, 0.0, 0.28)
 	var route_reduction: float = _duel_route_damage_reduction(defender, defense_stats)
 	if route_reduction > 0.0:
@@ -7711,7 +7729,7 @@ func _duel_finish_reason(winner: PlayerData, loser: PlayerData, winner_stats: Di
 		reasons.append("闪避更高")
 	if reasons.is_empty():
 		reasons.append("关键回合打出有效伤害")
-	return "胜负原因：" + winner.player_name + "胜在" + "、".join(reasons) + "。" + get_visible_combat_power_formula_text() + "；修为只决定境界门槛。"
+	return "胜负原因：" + winner.player_name + "胜在" + "、".join(reasons) + "。" + get_visible_combat_power_formula_text() + "；高境界会带来基础属性和对决压制。"
 
 
 func _sparring_should_finish() -> bool:
@@ -9907,6 +9925,11 @@ func _average_player_realm_rank() -> int:
 	if player_count <= 0:
 		return 0
 	return clampi(int(round(float(total_rank) / float(player_count))), 0, 3)
+
+
+func _realm_combat_power_bonus(realm_name: String) -> int:
+	var rank: int = clampi(_realm_rank(realm_name), 0, REALM_COMBAT_POWER_BONUS.size() - 1)
+	return int(REALM_COMBAT_POWER_BONUS[rank])
 
 
 func _realm_rank(realm_name: String) -> int:

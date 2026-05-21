@@ -120,7 +120,7 @@ func _build_ui() -> void:
 	action_panel.add_theme_stylebox_override("panel", _make_panel_style(false))
 	root.add_child(action_panel)
 
-	label_last_action = _make_label("等待出招：最终对战看战力、速度、法宝、构筑、暴击和闪避。修为只决定突破门槛。", 15, TEXT_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+	label_last_action = _make_label("等待出招：最终对战看境界、战力、速度、法宝、构筑、暴击和闪避。", 15, TEXT_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
 	label_last_action.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	action_panel.add_child(label_last_action)
 
@@ -652,7 +652,7 @@ func _format_opening_compare(stats_a: Dictionary, stats_b: Dictionary) -> String
 
 func _format_last_action(result: Dictionary) -> String:
 	if result.is_empty():
-		return "等待出招：最终对战看战力、速度、法宝、构筑、暴击和闪避。"
+		return "等待出招：最终对战看境界、战力、速度、法宝、构筑、暴击和闪避。"
 	var attacker: String = str(result.get("攻击方", "攻击方"))
 	var defender: String = str(result.get("防守方", "防守方"))
 	var actual_damage: int = int(result.get("实际伤害", result.get("damage", 0)))
