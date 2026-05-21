@@ -341,6 +341,7 @@ const TREASURE_AWAKEN_SKILLS := {
 }
 
 const TECHNIQUE_REALM_FRAGMENT_REQ := {"初窥": 3, "小成": 6}
+const TECHNIQUE_STAGE_MULTIPLIERS := {"初窥": 0.6, "小成": 1.2, "大成": 2.0}
 const TECHNIQUE_DUPLICATE_FRAGMENT_PROGRESS := 3
 const TECHNIQUE_MAX_BASE_BONUS_KEYS := 2
 const TECHNIQUE_MAX_AFFIX_BONUS_KEYS := 1
@@ -5636,14 +5637,29 @@ func _technique_effect_multiplier_total(technique: Dictionary) -> float:
 	return _technique_stage_multiplier(technique) * _technique_quality_multiplier(technique)
 
 
+func get_technique_effective_bonuses(technique: Dictionary, stage_override: String = "") -> Dictionary:
+	var bonuses: Dictionary = technique.get("bonuses", technique.get("base_bonuses", {})) as Dictionary
+	var stage_copy: Dictionary = technique
+	if stage_override != "":
+		stage_copy = technique.duplicate(true)
+		stage_copy["technique_realm"] = stage_override
+	var multiplier: float = _technique_effect_multiplier_total(stage_copy)
+	var result: Dictionary = {}
+	for bonus_name in bonuses:
+		result[str(bonus_name)] = float(bonuses[bonus_name]) * multiplier
+	return result
+
+
+func get_technique_stage_multiplier_text(stage_name: String) -> String:
+	var value: float = float(TECHNIQUE_STAGE_MULTIPLIERS.get(stage_name, 1.2))
+	var rounded: float = round(value * 10.0) / 10.0
+	if absf(rounded - round(rounded)) < 0.01:
+		return "×" + str(int(round(rounded)))
+	return "×" + str(rounded)
+
+
 func _technique_stage_multiplier(technique: Dictionary) -> float:
-	match str(technique.get("technique_realm", "初窥")):
-		"初窥":
-			return 0.5
-		"大成":
-			return 1.5
-		_:
-			return 1.0
+	return float(TECHNIQUE_STAGE_MULTIPLIERS.get(str(technique.get("technique_realm", "初窥")), 1.2))
 
 
 func _equipped_identity_items(player: PlayerData) -> Array[Dictionary]:
@@ -8520,7 +8536,7 @@ func _add_technique_fragment_progress(player: PlayerData, technique: Dictionary,
 		technique["realm_progress"] = progress - required
 		technique["realm_bonus"] = _technique_stage_multiplier(technique)
 		check_set_bonus(player)
-		return "《" + technique_name + "》" + source + "参悟圆满，由" + before_realm + "升至" + next_realm
+		return "《" + technique_name + "》" + source + "参悟圆满，由" + before_realm + "升至" + next_realm + "，功效" + get_technique_stage_multiplier_text(next_realm)
 
 	technique["realm_progress"] = progress
 	return "《" + technique_name + "》" + source + "参悟 +" + str(amount) + "（" + str(progress) + "/" + str(required) + "）"

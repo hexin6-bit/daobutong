@@ -5234,9 +5234,18 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 			var progress: int = int(data.get("realm_progress", 0))
 			var req: int = int(GameManager.TECHNIQUE_REALM_FRAGMENT_REQ.get(realm, 0))
 			var progress_text: String = "｜参悟 " + str(progress) + "/" + str(req) if req > 0 else "｜已大成"
+			var stage_text: String = "｜功效" + GameManager.get_technique_stage_multiplier_text(realm)
+			var effective_bonuses: Dictionary = GameManager.get_technique_effective_bonuses(data)
+			if effective_bonuses.is_empty():
+				effective_bonuses = bonuses if not bonuses.is_empty() else base_bonuses
 			lines.append("定位：上场后提供1-2项专精属性")
-			lines.append("修炼：" + realm + progress_text)
-			lines.append("效果：" + _format_bonus_dict(bonuses if not bonuses.is_empty() else base_bonuses))
+			lines.append("修炼：" + realm + progress_text + stage_text)
+			lines.append("效果：" + _format_bonus_dict(effective_bonuses))
+			var next_realm: String = _next_technique_realm_name(realm)
+			if next_realm != realm:
+				lines.append("下境：" + next_realm + "后 " + _format_bonus_dict(GameManager.get_technique_effective_bonuses(data, next_realm)))
+			else:
+				lines.append("圆满：已发挥全部功效")
 			lines.append("升级：" + _format_technique_growth_hint(str(data.get("primary_cultivation_tag", ""))))
 		"treasure":
 			lines.append("定位：抢攻自动出手")
@@ -5302,6 +5311,16 @@ func _format_technique_growth_hint(cultivation_tag: String) -> String:
 	if behavior_text == "":
 		return "同名残卷"
 	return "同名残卷；" + behavior_text
+
+
+func _next_technique_realm_name(current_realm: String) -> String:
+	match current_realm:
+		"初窥":
+			return "小成"
+		"小成":
+			return "大成"
+		_:
+			return current_realm
 
 
 func _format_growth_behavior_hint(cultivation_tag: String) -> String:
