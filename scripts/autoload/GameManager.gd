@@ -5012,7 +5012,7 @@ func _make_auction_lot(kind: String, quality: String) -> Dictionary:
 				"kind": kind,
 				"name": "矿材「" + str(ore.get("name", "矿材")) + "」",
 				"quality": quality,
-				"desc": "炼器材料，收入背包",
+				"desc": "炼器材料，可淬炼并重炼法宝",
 				"price": _market_buy_price("craft_material", quality),
 				"value": 1,
 				"item_data": ore,
@@ -9640,6 +9640,9 @@ func perform_refining(player: PlayerData, craft_grade: String = "good") -> Strin
 	var technique_message: String = _grow_techniques_for_cultivation(player, "器修", technique_growth, "开炉炼器")
 	if technique_message != "":
 		messages.append(technique_message)
+	var bonus_message: String = check_set_bonus(player)
+	if bonus_message != "":
+		messages.append(bonus_message)
 	return "；".join(messages)
 
 

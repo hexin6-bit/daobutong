@@ -489,7 +489,7 @@ func _build_lottery_panel() -> PanelContainer:
 	result_box.add_child(contest_button_row)
 
 	btn_contest_yield = Button.new()
-	btn_contest_yield.text = "放弃保底"
+	btn_contest_yield.text = "放弃争夺"
 	btn_contest_yield.custom_minimum_size = Vector2(168, 52)
 	btn_contest_yield.add_theme_font_size_override("font_size", 21)
 	btn_contest_yield.pressed.connect(_on_contest_decision_pressed.bind("yield"))
@@ -2050,7 +2050,7 @@ func _on_contest_started(data: Dictionary) -> void:
 	var title_color: Color = Color("#c04040") if is_calamity else Color("#f0c040")
 	var main_line: String = "你：抢｜对方：抢"
 	var role_hint: String = strong_name + "气势更盛，暂时压住了" + weak_name
-	var rule_hint: String = "放弃拿保底；搏命反扑约" + str(counter_chance_pct) + "%，成功收益翻倍" if is_weak_side else "等待对方抉择"
+	var rule_hint: String = "放弃只止损；搏命反扑约" + str(counter_chance_pct) + "%，成功收益翻倍" if is_weak_side else "等待对方抉择"
 	if is_calamity:
 		main_line = "你：躲避｜对方：躲避"
 		role_hint = strong_name + "暂避劫气，祸事缠向" + weak_name
