@@ -139,6 +139,7 @@ const REFINING_RELATED_STATS := ["体魄", "经商"]
 const DUEL_LING_LI_REQ := 3200
 const SECT_EVENT_ROUND_INTERVAL := 3
 const SECT_EVENT_CHOICE_SECONDS := 10.0
+const SECT_EVENT_PRIVATE_DRAW_COUNT := 5
 const SPARRING_MAX_ACTIONS := 3
 const SPARRING_LOW_HP_RATE := 0.35
 const MINOR_STAGE_NAMES := ["一层", "二层", "三层", "四层", "五层", "六层", "七层", "八层", "九层"]
@@ -1229,10 +1230,10 @@ func _trigger_sect_event() -> void:
 	var rules: String = ""
 	if event_type == "tournament":
 		desc = sect_a + "三年一比，门内同道各凭本事登台。切磋不伤性命，胜者得宗门赏赐。"
-		rules = "参加：连战3名同门NPC，逐场得奖励；双方全胜会师决赛。冠军得宗门奖品与身份分。"
+		rules = "参加：连战3名同门NPC，逐场得奖励；双方全胜会师决赛。冠军得宗门奖品与身份分。不参加：潜修抽" + str(SECT_EVENT_PRIVATE_DRAW_COUNT) + "张。"
 	else:
 		desc = sect_a + "与" + sect_b + "道统相争，先破对方宗门高手，再论最后胜负。此为切磋，不会陨落。"
-		rules = "参加：先打对方宗门NPC。胜者得灵石、功法与身份分；不参加会潜心修炼，但门派声望受损。"
+		rules = "参加：先打对方宗门NPC。胜者得灵石、功法与身份分；不参加：潜修抽" + str(SECT_EVENT_PRIVATE_DRAW_COUNT) + "张，争端中避战会损门派声望。"
 	current_sect_event = {
 		"id": Time.get_ticks_msec(),
 		"phase": "choice",
@@ -1425,8 +1426,10 @@ func _resolve_sect_event() -> Dictionary:
 func _resolve_sect_tournament(join_a: bool, join_b: bool, lines: Array[String]) -> String:
 	var sect_name: String = str(current_sect_event.get("sect_a", "宗门"))
 	if not join_a and not join_b:
-		lines.append("两人皆未赴会，" + sect_name + "大比静静落幕。")
-		return "宗门大比无人应战。"
+		lines.append("两人皆未赴会，各自闭门潜修。")
+		lines.append_array(_sect_event_private_cultivation(player_a, "潜心修炼") as Array)
+		lines.append_array(_sect_event_private_cultivation(player_b, "潜心修炼") as Array)
+		return "宗门大比无人登台，双方各自潜修。"
 	var run_a: Dictionary = _sect_event_tournament_run(player_a) if join_a else {"wins": -1, "all_win": false, "lines": [player_a.player_name + "闭门潜修。"]}
 	var run_b: Dictionary = _sect_event_tournament_run(player_b) if join_b else {"wins": -1, "all_win": false, "lines": [player_b.player_name + "闭门潜修。"]}
 	lines.append_array(run_a.get("lines", []) as Array)
@@ -1495,8 +1498,10 @@ func _resolve_sect_conflict(join_a: bool, join_b: bool, lines: Array[String]) ->
 	var sect_a: String = str(current_sect_event.get("sect_a", ""))
 	var sect_b: String = str(current_sect_event.get("sect_b", ""))
 	if not join_a and not join_b:
-		lines.append("两宗都未出战，风波暂息。")
-		return "宗门争端无人应战。"
+		lines.append("两宗都未出战，风波暂息，双方各自潜修。")
+		lines.append_array(_sect_event_private_cultivation(player_a, "潜心修炼") as Array)
+		lines.append_array(_sect_event_private_cultivation(player_b, "潜心修炼") as Array)
+		return "宗门争端暂息，双方各自潜修。"
 	if join_a and join_b:
 		var pve_a: Dictionary = _sect_event_pve_fight(player_a, 1.1, sect_b + "高手")
 		var pve_b: Dictionary = _sect_event_pve_fight(player_b, 1.1, sect_a + "高手")
@@ -1642,19 +1647,34 @@ func _sect_event_private_cultivation(player: PlayerData, source: String) -> Arra
 	var ji_yuan_stat: int = int(player.stats.get("机缘", 0))
 	var good_count: int = 0
 	var bad_count: int = 0
-	for i in range(10):
+	var detail_lines: Array[String] = []
+	for i in range(SECT_EVENT_PRIVATE_DRAW_COUNT):
 		if rng.randf() < 0.68:
 			var card: Dictionary = _sect_event_private_ji_yuan(ji_yuan_stat)
 			var message: String = _apply_ji_yuan(player, card, float(card.get("effect_value", card.get("value", 1.0))), "修")
 			if message != "":
 				good_count += 1
+			detail_lines.append(_sect_event_private_draw_line(i, card, message, false))
 		else:
 			var calamity: Dictionary = _sect_event_private_calamity(ji_yuan_stat)
 			var calamity_message: String = _apply_calamity(player, calamity, float(calamity.get("effect_value", calamity.get("value", 1.0))))
 			if calamity_message != "":
 				bad_count += 1
-	lines.append(player.player_name + source + "十抽已结算：机缘" + str(good_count) + "张，灾厄" + str(bad_count) + "张。")
+			detail_lines.append(_sect_event_private_draw_line(i, calamity, calamity_message, true))
+	lines.append(player.player_name + source + "抽到" + str(SECT_EVENT_PRIVATE_DRAW_COUNT) + "张：机缘" + str(good_count) + "张，灾厄" + str(bad_count) + "张。")
+	lines.append_array(detail_lines)
 	return lines
+
+
+func _sect_event_private_draw_line(index: int, card: Dictionary, result_message: String, is_calamity: bool) -> String:
+	var kind: String = "灾厄" if is_calamity else "机缘"
+	var desc: String = str(card.get("desc", ""))
+	if desc == "":
+		desc = generate_desc(card, is_calamity)
+	if desc == "":
+		desc = str(card.get("type", kind))
+	var result: String = result_message if result_message != "" else "无明显变化"
+	return str(index + 1) + ". " + kind + "｜" + desc + " → " + result
 
 
 func _sect_event_private_ji_yuan(stat: int) -> Dictionary:
