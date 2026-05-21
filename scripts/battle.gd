@@ -361,6 +361,16 @@ func _update_battle_info(data: Dictionary, animate: bool) -> void:
 	if animate:
 		var my_key: String = "a" if my_player == GameManager.player_a else "b"
 		var other_key: String = "b" if my_key == "a" else "a"
+		var enemy_attack_mode: String = str(data.get("enemy_attack_mode", ""))
+		var enemy_attack_target: String = str(data.get("enemy_attack_target", ""))
+		if enemy_attack_mode == "group":
+			_spawn_float_text(my_area, "横扫！", Color("#ffb060"))
+			_spawn_float_text(other_area, "横扫！", Color("#ffb060"))
+		elif enemy_attack_mode == "single":
+			if enemy_attack_target == my_key:
+				_spawn_float_text(my_area, "点名！", Color("#ffb060"))
+			elif enemy_attack_target == other_key:
+				_spawn_float_text(other_area, "点名！", Color("#ffb060"))
 		if bool(data.get("dodge_" + my_key, false)):
 			_spawn_float_text(my_area, "闪避！", Color("#80e0ff"))
 		if bool(data.get("dodge_" + other_key, false)):

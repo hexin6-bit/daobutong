@@ -16,8 +16,11 @@ var hour_zhi: String = "子"
 var current_stats: Dictionary = {}
 var current_hour_bonus: Dictionary = {}
 
+var player_name_edit: LineEdit
 var birth_year_edit: LineEdit
 var birth_month_edit: LineEdit
+var birth_day_edit: LineEdit
+var birth_hour_edit: LineEdit
 var year_value_label: Label
 var month_value_label: Label
 var day_value_label: Label
@@ -44,14 +47,18 @@ func _build_ui() -> void:
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
 
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scroll.offset_left = 42
+	scroll.offset_top = 42
+	scroll.offset_right = -42
+	scroll.offset_bottom = -36
+	add_child(scroll)
+
 	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 18)
-	root.offset_left = 50
-	root.offset_top = 70
-	root.offset_right = -50
-	root.offset_bottom = -60
-	add_child(root)
+	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_theme_constant_override("separation", 12)
+	scroll.add_child(root)
 
 	var title := Label.new()
 	title.text = "天道筑基"
@@ -67,33 +74,67 @@ func _build_ui() -> void:
 	subtitle.add_theme_color_override("font_color", Color("#e0e0e0"))
 	root.add_child(subtitle)
 
-	var spacer_top := Control.new()
-	spacer_top.custom_minimum_size = Vector2(1, 8)
-	root.add_child(spacer_top)
+	var name_row := HBoxContainer.new()
+	name_row.custom_minimum_size = Vector2(1, 50)
+	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	name_row.add_theme_constant_override("separation", 10)
+	root.add_child(name_row)
+
+	var name_label := Label.new()
+	name_label.text = "道号"
+	name_label.custom_minimum_size = Vector2(72, 46)
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	name_label.add_theme_font_size_override("font_size", 21)
+	name_label.add_theme_color_override("font_color", Color("#e0d5b7"))
+	name_row.add_child(name_label)
+
+	player_name_edit = LineEdit.new()
+	player_name_edit.placeholder_text = "例如：玄尘、云舟、阿衡"
+	player_name_edit.text = GameManager.local_player_name if GameManager.local_player_name != "" else ""
+	player_name_edit.custom_minimum_size = Vector2(360, 46)
+	player_name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	player_name_edit.max_length = 8
+	player_name_edit.add_theme_font_size_override("font_size", 22)
+	name_row.add_child(player_name_edit)
 
 	var birth_row := HBoxContainer.new()
 	birth_row.custom_minimum_size = Vector2(1, 52)
 	birth_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	birth_row.add_theme_constant_override("separation", 10)
+	birth_row.add_theme_constant_override("separation", 8)
 	root.add_child(birth_row)
 
 	birth_year_edit = LineEdit.new()
 	birth_year_edit.placeholder_text = "出生年"
 	birth_year_edit.text = "2000"
-	birth_year_edit.custom_minimum_size = Vector2(150, 46)
+	birth_year_edit.custom_minimum_size = Vector2(118, 46)
 	birth_year_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	birth_row.add_child(birth_year_edit)
 
 	birth_month_edit = LineEdit.new()
 	birth_month_edit.placeholder_text = "出生月"
 	birth_month_edit.text = "1"
-	birth_month_edit.custom_minimum_size = Vector2(110, 46)
+	birth_month_edit.custom_minimum_size = Vector2(86, 46)
 	birth_month_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	birth_row.add_child(birth_month_edit)
 
+	birth_day_edit = LineEdit.new()
+	birth_day_edit.placeholder_text = "出生日"
+	birth_day_edit.text = "1"
+	birth_day_edit.custom_minimum_size = Vector2(86, 46)
+	birth_day_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	birth_row.add_child(birth_day_edit)
+
+	birth_hour_edit = LineEdit.new()
+	birth_hour_edit.placeholder_text = "出生时0-23"
+	birth_hour_edit.text = "0"
+	birth_hour_edit.custom_minimum_size = Vector2(96, 46)
+	birth_hour_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	birth_row.add_child(birth_hour_edit)
+
 	var birth_button := Button.new()
-	birth_button.text = "按年月生成"
-	birth_button.custom_minimum_size = Vector2(170, 46)
+	birth_button.text = "按日时生成"
+	birth_button.custom_minimum_size = Vector2(150, 46)
 	birth_button.pressed.connect(_apply_birth_input)
 	birth_row.add_child(birth_button)
 
@@ -237,15 +278,17 @@ func _randomize_hour() -> void:
 func _apply_birth_input() -> void:
 	var year: int = int(birth_year_edit.text.strip_edges())
 	var month: int = clampi(int(birth_month_edit.text.strip_edges()), 1, 12)
+	var day: int = clampi(int(birth_day_edit.text.strip_edges()), 1, 31)
+	var hour: int = clampi(int(birth_hour_edit.text.strip_edges()), 0, 23)
 	if year <= 0:
 		status_label.text = "请输入正确出生年份"
 		return
 
 	year_gan = BaziCalculator.TIANGAN[posmod(year - 4, BaziCalculator.TIANGAN.size())]
 	month_zhi = BaziCalculator.DIZHI[posmod(month + 1, BaziCalculator.DIZHI.size())]
-	day_gan = BaziCalculator.TIANGAN[posmod(year + month, BaziCalculator.TIANGAN.size())]
-	hour_zhi = _pick(BaziCalculator.DIZHI)
-	status_label.text = "已按出生年月生成八字"
+	day_gan = BaziCalculator.TIANGAN[posmod(year + month + day, BaziCalculator.TIANGAN.size())]
+	hour_zhi = BaziCalculator.DIZHI[posmod(int(floor(float(hour + 1) / 2.0)), BaziCalculator.DIZHI.size())]
+	status_label.text = "已按出生年月日时生成八字"
 	_update_bazi()
 
 
@@ -261,7 +304,7 @@ func _randomize_all() -> void:
 
 
 func _update_bazi() -> void:
-	current_stats = BaziCalculator.calculate_stats(year_gan, month_zhi, day_gan)
+	current_stats = BaziCalculator.calculate_stats(year_gan, month_zhi, day_gan, hour_zhi)
 	current_hour_bonus = BaziCalculator.get_hour_bonus(hour_zhi)
 	_update_labels()
 
@@ -290,6 +333,8 @@ func _on_confirm_pressed() -> void:
 	status_label.text = "已确认，等待对方..."
 
 	var player: PlayerData = GameManager.player_a if GameManager.single_player_mode or NetworkManager.is_host else GameManager.player_b
+	if player_name_edit != null:
+		GameManager.set_local_player_name(player_name_edit.text.strip_edges())
 	player.player_name = GameManager.local_player_name
 	player.sect = ""
 	_apply_data_to_player(player, current_stats, current_hour_bonus, _current_bazi_data())

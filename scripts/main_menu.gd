@@ -33,8 +33,10 @@ func _ready() -> void:
 	button_host.pressed.connect(_on_host_pressed)
 	button_scan.pressed.connect(_on_scan_pressed)
 	button_join.pressed.connect(_on_join_pressed)
-	NetworkManager.connection_success.connect(_on_connected)
-	NetworkManager.connection_failed.connect(_on_connect_failed)
+	if not NetworkManager.connection_success.is_connected(_on_connected):
+		NetworkManager.connection_success.connect(_on_connected)
+	if not NetworkManager.connection_failed.is_connected(_on_connect_failed):
+		NetworkManager.connection_failed.connect(_on_connect_failed)
 	_show_mode_menu()
 
 
@@ -61,26 +63,6 @@ func _build_ui() -> void:
 	subtitle.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_set_top_band(subtitle, 205, 42)
 	add_child(subtitle)
-
-	var name_label := Label.new()
-	name_label.text = "你的道号"
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.add_theme_font_size_override("font_size", 22)
-	name_label.add_theme_color_override("font_color", Color("#e0d5b7"))
-	name_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_set_top_band(name_label, 260, 34)
-	add_child(name_label)
-
-	line_edit_name = LineEdit.new()
-	line_edit_name.placeholder_text = "例如：玄尘、云舟、阿衡"
-	line_edit_name.text = GameManager.local_player_name if GameManager.local_player_name != "" else ""
-	line_edit_name.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	line_edit_name.custom_minimum_size = Vector2(430, 60)
-	line_edit_name.size = Vector2(430, 60)
-	line_edit_name.position = Vector2((750 - 430) * 0.5, 300)
-	line_edit_name.max_length = 8
-	line_edit_name.add_theme_font_size_override("font_size", 24)
-	add_child(line_edit_name)
 
 	var sect_hint := Label.new()
 	sect_hint.text = "修行流派由功法与法宝定型，宗门身份由伙伴定型"
@@ -230,7 +212,8 @@ func _show_mode_menu() -> void:
 	_set_nodes_visible(mode_nodes, true)
 	_set_nodes_visible(multiplayer_nodes, false)
 	_set_nodes_visible(npc_nodes, false)
-	line_edit_name.visible = true
+	if line_edit_name != null:
+		line_edit_name.visible = false
 	button_continue.visible = GameManager.has_save_game()
 	button_back.visible = false
 	label_status.text = ""
@@ -240,16 +223,18 @@ func _show_single_player_menu() -> void:
 	_set_nodes_visible(mode_nodes, false)
 	_set_nodes_visible(multiplayer_nodes, false)
 	_set_nodes_visible(npc_nodes, true)
-	line_edit_name.visible = true
+	if line_edit_name != null:
+		line_edit_name.visible = false
 	button_back.visible = true
-	label_status.text = "先定道号，再选一位同道。你的流派会在局内成形。"
+	label_status.text = "先选一位同道，入局后再立道号与天命。你的流派会在局内成形。"
 
 
 func _show_multiplayer_menu() -> void:
 	_set_nodes_visible(mode_nodes, false)
 	_set_nodes_visible(npc_nodes, false)
 	_set_nodes_visible(multiplayer_nodes, true)
-	line_edit_name.visible = true
+	if line_edit_name != null:
+		line_edit_name.visible = false
 	button_back.visible = true
 	room_list.visible = false
 	line_edit_ip.visible = false
@@ -356,5 +341,5 @@ func _scan_lan() -> void:
 
 func _get_entered_name() -> String:
 	if line_edit_name == null:
-		return ""
-	return line_edit_name.text.strip_edges()
+		return GameManager.local_player_name
+	return GameManager.local_player_name if line_edit_name.text.strip_edges() == "" else line_edit_name.text.strip_edges()

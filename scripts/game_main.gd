@@ -15,6 +15,7 @@ var label_enemy_comp_count: Label
 var label_enemy_sect_badge: Label
 var label_enemy_resonance_badge: Label
 var label_npc_dialogue: Label
+var lottery_card_area: Control
 var lottery_container: Control
 var lottery_scroll: ScrollContainer
 var taiji_rect: TextureRect
@@ -28,7 +29,6 @@ var label_auction_status: Label
 var auction_lot_labels: Array[Label] = []
 var auction_bid_buttons: Array[Button] = []
 var auction_haggle_buttons: Array[Button] = []
-var button_auction_backpack: Button
 var button_auction_pass: Button
 var result_toast: PanelContainer
 var label_result_title: Label
@@ -44,7 +44,6 @@ var scroll_my_info: ScrollContainer
 var label_my_name: Label
 var label_my_sect_badge: Label
 var label_my_resonance_badge: Label
-var label_build_progress: Label
 var build_route_grid: GridContainer
 var build_route_buttons: Dictionary = {}
 var build_info_dialog: AcceptDialog
@@ -61,8 +60,9 @@ var label_backpack: Label
 var label_backpack_block: Label
 var button_breakthrough: Button
 var button_backpack: Button
+var button_alchemy: Button
+var button_refining: Button
 var button_market: Button
-var button_save: Button
 var technique_slot_nodes: Array[InventoryDropSlot] = []
 var treasure_slot_node: InventoryDropSlot
 var companion_slot_nodes: Array[InventoryDropSlot] = []
@@ -111,6 +111,42 @@ var last_log_text: String = ""
 var treasure_growth_cache: Dictionary = {}
 var last_my_power: int = -1
 var last_enemy_power: int = -1
+var crafting_layer: Control
+var crafting_panel: PanelContainer
+var crafting_title_label: Label
+var crafting_status_label: Label
+var crafting_art_panel: PanelContainer
+var crafting_art_label: Label
+var crafting_feedback_panel: PanelContainer
+var crafting_feedback_label: Label
+var crafting_feedback_detail_label: Label
+var crafting_bar: Control
+var crafting_good_zone: ColorRect
+var crafting_perfect_zone: ColorRect
+var crafting_pointer: ColorRect
+var crafting_action_button: Button
+var crafting_mode: String = ""
+var crafting_pointer_value: float = 0.0
+var crafting_pointer_dir: float = 1.0
+var crafting_speed: float = 0.82
+var crafting_running: bool = false
+var crafting_good_left: float = 0.34
+var crafting_good_right: float = 0.66
+var crafting_perfect_left: float = 0.46
+var crafting_perfect_right: float = 0.54
+var sect_event_layer: Control
+var sect_event_title_label: Label
+var sect_event_desc_label: Label
+var sect_event_countdown_label: Label
+var sect_event_body_label: RichTextLabel
+var sect_event_join_button: Button
+var sect_event_skip_button: Button
+var sect_event_continue_button: Button
+var sect_event_choice_sent: bool = false
+var sect_event_continue_sent: bool = false
+var sect_event_countdown_remaining: float = 0.0
+var sect_event_countdown_active: bool = false
+var sect_event_current_id: int = -1
 
 
 func _ready() -> void:
@@ -135,6 +171,9 @@ func _ready() -> void:
 	GameManager.breakthrough_feedback.connect(_on_breakthrough_feedback)
 	GameManager.npc_dialogue_changed.connect(_on_npc_dialogue_changed)
 	GameManager.set_bonus_triggered.connect(_on_set_bonus_triggered)
+	GameManager.sect_event_started.connect(_on_sect_event_started)
+	GameManager.sect_event_updated.connect(_on_sect_event_updated)
+	GameManager.sect_event_finished.connect(_on_sect_event_finished)
 	btn_qiang.pressed.connect(_on_choice.bind("抢"))
 	btn_rang.pressed.connect(_on_choice.bind("让"))
 
@@ -151,6 +190,10 @@ func _process(_delta: float) -> void:
 		_reset_fullscreen_layout()
 	if label_log != null and label_log.text != last_log_text:
 		_capture_log_change(label_log.text)
+	if crafting_running:
+		_update_crafting_minigame(_delta)
+	if sect_event_countdown_active:
+		_update_sect_event_countdown(_delta)
 
 
 func _reset_fullscreen_layout() -> void:
@@ -171,14 +214,13 @@ func _build_ui() -> void:
 	var root := VBoxContainer.new()
 	UIEffects.apply_phone_safe_margins(root, 34.0, 22.0, 86.0)
 	root.add_theme_constant_override("separation", 8)
-	root.clip_contents = true
+	root.clip_contents = false
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(root)
 
 	root.add_child(_build_enemy_panel())
 	root.add_child(_build_lottery_panel())
 	root.add_child(_build_my_info_panel())
-	root.add_child(_build_log_panel())
 
 	floating_layer = Control.new()
 	floating_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -188,6 +230,12 @@ func _build_ui() -> void:
 
 	backpack_overlay_layer = _build_backpack_overlay()
 	add_child(backpack_overlay_layer)
+
+	crafting_layer = _build_crafting_overlay()
+	add_child(crafting_layer)
+
+	sect_event_layer = _build_sect_event_overlay()
+	add_child(sect_event_layer)
 
 	_build_screen_effect_layers()
 
@@ -306,12 +354,12 @@ func _build_enemy_panel() -> PanelContainer:
 	label_enemy_name.clip_text = false
 	label_enemy_name.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	enemy_name_row.add_child(label_enemy_name)
-	label_enemy_sect_badge = _make_label("【剑】", 18, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
+	label_enemy_sect_badge = _make_label("【剑】", 20, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
 	label_enemy_sect_badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	label_enemy_sect_badge.clip_text = false
 	label_enemy_sect_badge.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	enemy_name_row.add_child(label_enemy_sect_badge)
-	label_enemy_resonance_badge = _make_label("", 14, Color("#d8d8e8"), HORIZONTAL_ALIGNMENT_CENTER)
+	label_enemy_resonance_badge = _make_label("", 18, Color("#d8d8e8"), HORIZONTAL_ALIGNMENT_CENTER)
 	enemy_name_row.add_child(label_enemy_resonance_badge)
 
 	label_enemy_realm = _make_label("炼气一层", 16, Color("#8a8070"), HORIZONTAL_ALIGNMENT_CENTER)
@@ -349,10 +397,10 @@ func _build_lottery_panel() -> PanelContainer:
 	label_round_info = _make_label("第 1 轮", 28, Color("#e0e0e0"), HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(label_round_info)
 
-	var card_area := Control.new()
-	card_area.custom_minimum_size = Vector2(1, 330)
-	card_area.clip_contents = false
-	box.add_child(card_area)
+	lottery_card_area = Control.new()
+	lottery_card_area.custom_minimum_size = Vector2(1, 330)
+	lottery_card_area.clip_contents = false
+	box.add_child(lottery_card_area)
 
 	taiji_rect = TextureRect.new()
 	taiji_rect.name = "TaijiWheel"
@@ -370,15 +418,15 @@ func _build_lottery_panel() -> PanelContainer:
 	taiji_rect.pivot_offset = Vector2(56, 56)
 	taiji_rect.modulate.a = 0.55
 	taiji_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_area.add_child(taiji_rect)
-	_build_taiji_animation(card_area)
+	lottery_card_area.add_child(taiji_rect)
+	_build_taiji_animation(lottery_card_area)
 
 	lottery_scroll = null
 
 	lottery_container = Control.new()
 	lottery_container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	lottery_container.clip_contents = false
-	card_area.add_child(lottery_container)
+	lottery_card_area.add_child(lottery_container)
 
 	var build_sidebar := VBoxContainer.new()
 	build_sidebar.anchor_left = 0.0
@@ -389,20 +437,12 @@ func _build_lottery_panel() -> PanelContainer:
 	build_sidebar.offset_top = -150.0
 	build_sidebar.offset_bottom = 150.0
 	build_sidebar.add_theme_constant_override("separation", 5)
-	card_area.add_child(build_sidebar)
-	card_area.resized.connect(func() -> void:
-		_position_build_sidebar(build_sidebar, card_area)
+	lottery_card_area.add_child(build_sidebar)
+	lottery_card_area.resized.connect(func() -> void:
+		_position_build_sidebar(build_sidebar, lottery_card_area)
 	)
-	_position_build_sidebar(build_sidebar, card_area)
+	_position_build_sidebar(build_sidebar, lottery_card_area)
 
-	label_build_progress = _make_label("", 18, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
-	label_build_progress.custom_minimum_size = Vector2(84, 58)
-	label_build_progress.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label_build_progress.clip_text = false
-	label_build_progress.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	label_build_progress.add_theme_font_size_override("font_size", 13)
-	label_build_progress.visible = false
-	build_sidebar.add_child(label_build_progress)
 	build_sidebar.add_child(_build_route_visualizer())
 
 	btn_inject_shouyuan = Button.new()
@@ -519,10 +559,10 @@ func _build_auction_panel() -> PanelContainer:
 	box.add_theme_constant_override("separation", 8)
 	auction_panel.add_child(box)
 
-	label_auction_title = _make_label("拍卖会", 32, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
+	label_auction_title = _make_label("坊市", 32, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
 	box.add_child(label_auction_title)
 
-	label_auction_status = _make_label("选择一件拍品：经商降低花费，讲价更便宜，出价竞拍优先。", 20, Color("#e0d5b7"), HORIZONTAL_ALIGNMENT_CENTER)
+	label_auction_status = _make_label("选择一件货品：经商降低花费，讲价更便宜，出价更优先。", 20, Color("#e0d5b7"), HORIZONTAL_ALIGNMENT_CENTER)
 	label_auction_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(label_auction_status)
 
@@ -534,7 +574,7 @@ func _build_auction_panel() -> PanelContainer:
 		row.add_theme_constant_override("separation", 8)
 		box.add_child(row)
 
-		var lot_label := _make_label("拍品", 19, Color("#e0d5b7"))
+		var lot_label := _make_label("货品", 19, Color("#e0d5b7"))
 		lot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lot_label.custom_minimum_size = Vector2(330, 54)
 		lot_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
@@ -557,13 +597,6 @@ func _build_auction_panel() -> PanelContainer:
 	auction_bottom_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	auction_bottom_row.add_theme_constant_override("separation", 12)
 	box.add_child(auction_bottom_row)
-
-	button_auction_backpack = Button.new()
-	button_auction_backpack.text = "倒卖背包"
-	button_auction_backpack.custom_minimum_size = Vector2(180, 48)
-	button_auction_backpack.add_theme_font_size_override("font_size", 22)
-	button_auction_backpack.pressed.connect(_on_backpack_button_pressed)
-	auction_bottom_row.add_child(button_auction_backpack)
 
 	button_auction_pass = Button.new()
 	button_auction_pass.text = "不买，离场"
@@ -597,22 +630,22 @@ func _build_my_info_panel() -> PanelContainer:
 
 	var my_name_row := HBoxContainer.new()
 	my_name_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	my_name_row.add_theme_constant_override("separation", 8)
+	my_name_row.add_theme_constant_override("separation", 4)
 	box.add_child(my_name_row)
 
 	label_my_name = _make_label("我", 24, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
 	label_my_name.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	label_my_name.custom_minimum_size = Vector2(128, 34)
+	label_my_name.custom_minimum_size = Vector2(88, 34)
 	label_my_name.clip_text = false
 	label_my_name.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	my_name_row.add_child(label_my_name)
-	label_my_sect_badge = _make_label("【未定】", 18, Color("#8a8070"), HORIZONTAL_ALIGNMENT_CENTER)
+	label_my_sect_badge = _make_label("未定", 24, Color("#8a8070"), HORIZONTAL_ALIGNMENT_LEFT)
 	label_my_sect_badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	label_my_sect_badge.custom_minimum_size = Vector2(0, 36)
 	label_my_sect_badge.clip_text = false
 	label_my_sect_badge.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	my_name_row.add_child(label_my_sect_badge)
-	label_my_resonance_badge = _make_label("", 16, Color("#d8d8e8"), HORIZONTAL_ALIGNMENT_CENTER)
+	label_my_resonance_badge = _make_label("", 20, Color("#d8d8e8"), HORIZONTAL_ALIGNMENT_CENTER)
 	label_my_resonance_badge.custom_minimum_size = Vector2(70, 42)
 	my_name_row.add_child(label_my_resonance_badge)
 
@@ -663,31 +696,40 @@ func _build_my_info_panel() -> PanelContainer:
 
 	var resource_row := HBoxContainer.new()
 	resource_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	resource_row.add_theme_constant_override("separation", 12)
+	resource_row.add_theme_constant_override("separation", 6)
 	box.add_child(resource_row)
 
 	button_backpack = Button.new()
 	button_backpack.text = "背包 0/8\n灵石 0"
-	button_backpack.custom_minimum_size = Vector2(210, 58)
+	button_backpack.custom_minimum_size = Vector2(122, 58)
 	button_backpack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	button_backpack.add_theme_font_size_override("font_size", 22)
+	button_backpack.add_theme_font_size_override("font_size", 18)
 	button_backpack.pressed.connect(_on_backpack_button_pressed)
 	resource_row.add_child(button_backpack)
 
+	button_alchemy = Button.new()
+	button_alchemy.text = "炼丹"
+	button_alchemy.custom_minimum_size = Vector2(76, 58)
+	button_alchemy.add_theme_font_size_override("font_size", 18)
+	button_alchemy.pressed.connect(_on_alchemy_pressed)
+	resource_row.add_child(button_alchemy)
+
+	button_refining = Button.new()
+	button_refining.text = "炼器"
+	button_refining.custom_minimum_size = Vector2(76, 58)
+	button_refining.add_theme_font_size_override("font_size", 18)
+	button_refining.pressed.connect(_on_refining_pressed)
+	resource_row.add_child(button_refining)
+
+	resource_row.add_child(_build_log_panel())
+
 	button_market = Button.new()
-	button_market.text = "拍卖会"
+	button_market.text = "坊市"
 	button_market.custom_minimum_size = Vector2(150, 58)
 	button_market.add_theme_font_size_override("font_size", 24)
 	button_market.pressed.connect(_on_market_pressed)
 	button_market.visible = false
 	resource_row.add_child(button_market)
-
-	button_save = Button.new()
-	button_save.text = "存档"
-	button_save.custom_minimum_size = Vector2(116, 58)
-	button_save.add_theme_font_size_override("font_size", 22)
-	button_save.pressed.connect(_on_save_pressed)
-	resource_row.add_child(button_save)
 
 	box.add_child(label_backpack_block)
 
@@ -787,6 +829,7 @@ func _build_backpack_overlay() -> Control:
 	dim.color = Color(0.0, 0.0, 0.0, 0.54)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(_on_backpack_overlay_dim_gui_input)
 	layer.add_child(dim)
 
 	var center: CenterContainer = CenterContainer.new()
@@ -813,13 +856,6 @@ func _build_backpack_overlay() -> Control:
 	label_backpack_overlay_title = _make_label("背包", 28, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
 	label_backpack_overlay_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(label_backpack_overlay_title)
-
-	var close_button: Button = Button.new()
-	close_button.text = "关闭"
-	close_button.custom_minimum_size = Vector2(112, 50)
-	close_button.add_theme_font_size_override("font_size", 22)
-	close_button.pressed.connect(_hide_backpack_overlay)
-	title_row.add_child(close_button)
 
 	var content_row: HBoxContainer = HBoxContainer.new()
 	content_row.add_theme_constant_override("separation", 12)
@@ -850,6 +886,23 @@ func _build_backpack_overlay() -> Control:
 	backpack_overlay_list.gui_input.connect(_on_backpack_overlay_list_gui_input)
 	left_box.add_child(backpack_overlay_list)
 
+	var detail_panel: PanelContainer = PanelContainer.new()
+	detail_panel.custom_minimum_size = Vector2(1, 246)
+	detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_apply_panel_style(detail_panel, Color("#18182d"))
+	right_box.add_child(detail_panel)
+
+	var detail_scroll: ScrollContainer = ScrollContainer.new()
+	detail_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	detail_panel.add_child(detail_scroll)
+
+	label_backpack_overlay_detail = _make_label("点选一张牌查看效果。", 22, Color("#e0d5b7"))
+	label_backpack_overlay_detail.clip_text = false
+	label_backpack_overlay_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label_backpack_overlay_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label_backpack_overlay_detail.custom_minimum_size = Vector2(1, 220)
+	detail_scroll.add_child(label_backpack_overlay_detail)
+
 	backpack_action_grid = GridContainer.new()
 	backpack_action_grid.columns = 2
 	backpack_action_grid.add_theme_constant_override("h_separation", 10)
@@ -878,43 +931,257 @@ func _build_backpack_overlay() -> Control:
 	button_backpack_overlay_discard.disabled = true
 	button_backpack_overlay_discard.pressed.connect(_on_backpack_overlay_discard_pressed)
 	bottom_action_row.add_child(button_backpack_overlay_discard)
-
-	var detail_panel: PanelContainer = PanelContainer.new()
-	detail_panel.custom_minimum_size = Vector2(1, 126)
-	_apply_panel_style(detail_panel, Color("#18182d"))
-	right_box.add_child(detail_panel)
-
-	var detail_scroll: ScrollContainer = ScrollContainer.new()
-	detail_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	detail_panel.add_child(detail_scroll)
-
-	label_backpack_overlay_detail = _make_label("点选一张牌查看效果。", 22, Color("#e0d5b7"))
-	label_backpack_overlay_detail.clip_text = false
-	label_backpack_overlay_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_scroll.add_child(label_backpack_overlay_detail)
 	return layer
+
+
+func _build_crafting_overlay() -> Control:
+	var layer: Control = Control.new()
+	layer.visible = false
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.z_index = 365
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	var dim: ColorRect = ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.62)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(_on_crafting_overlay_dim_gui_input)
+	layer.add_child(dim)
+
+	var center: CenterContainer = CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(center)
+
+	crafting_panel = PanelContainer.new()
+	crafting_panel.custom_minimum_size = Vector2(_safe_overlay_width(620.0), 360.0)
+	_apply_panel_style(crafting_panel, Color("#18182d"))
+	center.add_child(crafting_panel)
+
+	var box: VBoxContainer = VBoxContainer.new()
+	box.add_theme_constant_override("separation", 16)
+	crafting_panel.add_child(box)
+
+	crafting_title_label = _make_label("开炉", 32, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
+	box.add_child(crafting_title_label)
+
+	crafting_status_label = _make_label("看准火候点收火，点空白处停手。", 22, Color("#e0d5b7"), HORIZONTAL_ALIGNMENT_CENTER)
+	crafting_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(crafting_status_label)
+
+	crafting_art_panel = PanelContainer.new()
+	crafting_art_panel.custom_minimum_size = Vector2(1, 92)
+	crafting_art_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	crafting_art_panel.add_theme_stylebox_override("panel", _make_crafting_art_style(Color("#2a1b10"), Color("#f0c040")))
+	box.add_child(crafting_art_panel)
+
+	crafting_art_label = _make_label("丹炉", 38, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
+	crafting_art_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	crafting_art_label.custom_minimum_size = Vector2(1, 82)
+	crafting_art_panel.add_child(crafting_art_label)
+
+	crafting_bar = Control.new()
+	crafting_bar.custom_minimum_size = Vector2(1, 58)
+	crafting_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(crafting_bar)
+
+	var bar_bg := ColorRect.new()
+	bar_bg.color = Color("#111126")
+	bar_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	crafting_bar.add_child(bar_bg)
+	crafting_good_zone = _make_crafting_zone(0.34, 0.66, Color("#4040c0"))
+	crafting_bar.add_child(crafting_good_zone)
+	crafting_perfect_zone = _make_crafting_zone(0.46, 0.54, Color("#f0c040"))
+	crafting_bar.add_child(crafting_perfect_zone)
+
+	crafting_pointer = ColorRect.new()
+	crafting_pointer.color = Color.WHITE
+	crafting_pointer.anchor_top = 0.0
+	crafting_pointer.anchor_bottom = 1.0
+	crafting_pointer.offset_left = 0.0
+	crafting_pointer.offset_right = 6.0
+	crafting_bar.add_child(crafting_pointer)
+
+	crafting_feedback_panel = PanelContainer.new()
+	crafting_feedback_panel.visible = false
+	crafting_feedback_panel.custom_minimum_size = Vector2(1, 88)
+	crafting_feedback_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	crafting_feedback_panel.add_theme_stylebox_override("panel", _make_crafting_art_style(Color("#261604"), Color("#f0c040")))
+	box.add_child(crafting_feedback_panel)
+
+	var feedback_box := VBoxContainer.new()
+	feedback_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	feedback_box.add_theme_constant_override("separation", 2)
+	crafting_feedback_panel.add_child(feedback_box)
+
+	crafting_feedback_label = _make_label("火候已成", 28, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
+	feedback_box.add_child(crafting_feedback_label)
+	crafting_feedback_detail_label = _make_label("收火及时，灵机入炉。", 18, Color("#e0d5b7"), HORIZONTAL_ALIGNMENT_CENTER)
+	crafting_feedback_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	feedback_box.add_child(crafting_feedback_detail_label)
+
+	var hint_label: Label = _make_label("蓝区成功，金区完美；失手也会有少量残火收益。", 19, Color("#8a8070"), HORIZONTAL_ALIGNMENT_CENTER)
+	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(hint_label)
+
+	var button_row := HBoxContainer.new()
+	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_row.add_theme_constant_override("separation", 14)
+	box.add_child(button_row)
+
+	crafting_action_button = Button.new()
+	crafting_action_button.text = "收火"
+	crafting_action_button.custom_minimum_size = Vector2(220, 58)
+	crafting_action_button.add_theme_font_size_override("font_size", 24)
+	crafting_action_button.pressed.connect(_on_crafting_action_pressed)
+	button_row.add_child(crafting_action_button)
+	return layer
+
+
+func _build_sect_event_overlay() -> Control:
+	var layer: Control = Control.new()
+	layer.visible = false
+	layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.z_index = 380
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	var dim: ColorRect = ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.72)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
+
+	var center: CenterContainer = CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(center)
+
+	var panel: PanelContainer = PanelContainer.new()
+	panel.custom_minimum_size = Vector2(_safe_overlay_width(680.0), 560.0)
+	_apply_panel_style(panel, Color("#18182d"))
+	center.add_child(panel)
+
+	var box: VBoxContainer = VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+
+	sect_event_title_label = _make_label("宗门事件", 34, Color("#f0c040"), HORIZONTAL_ALIGNMENT_CENTER)
+	box.add_child(sect_event_title_label)
+
+	sect_event_desc_label = _make_label("", 22, Color("#e0d5b7"), HORIZONTAL_ALIGNMENT_CENTER)
+	sect_event_desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sect_event_desc_label.custom_minimum_size = Vector2(1, 80)
+	box.add_child(sect_event_desc_label)
+
+	sect_event_countdown_label = _make_label("10秒后默认不参加", 24, Color("#c080e0"), HORIZONTAL_ALIGNMENT_CENTER)
+	box.add_child(sect_event_countdown_label)
+
+	sect_event_body_label = RichTextLabel.new()
+	sect_event_body_label.custom_minimum_size = Vector2(1, 230)
+	sect_event_body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sect_event_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sect_event_body_label.bbcode_enabled = false
+	sect_event_body_label.scroll_active = true
+	sect_event_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sect_event_body_label.add_theme_font_size_override("normal_font_size", 22)
+	sect_event_body_label.add_theme_color_override("default_color", Color("#e0d5b7"))
+	box.add_child(sect_event_body_label)
+
+	var button_row: HBoxContainer = HBoxContainer.new()
+	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	button_row.add_theme_constant_override("separation", 18)
+	box.add_child(button_row)
+
+	sect_event_join_button = _make_choice_button("参加", Color("#3c8a5a"))
+	sect_event_join_button.custom_minimum_size = Vector2(240, 76)
+	sect_event_join_button.add_theme_font_size_override("font_size", 30)
+	sect_event_join_button.pressed.connect(_on_sect_event_choice_pressed.bind(true))
+	button_row.add_child(sect_event_join_button)
+
+	sect_event_skip_button = _make_choice_button("不参加", Color("#444472"))
+	sect_event_skip_button.custom_minimum_size = Vector2(240, 76)
+	sect_event_skip_button.add_theme_font_size_override("font_size", 30)
+	sect_event_skip_button.pressed.connect(_on_sect_event_choice_pressed.bind(false))
+	button_row.add_child(sect_event_skip_button)
+
+	sect_event_continue_button = Button.new()
+	sect_event_continue_button.text = "继续修行"
+	sect_event_continue_button.visible = false
+	sect_event_continue_button.custom_minimum_size = Vector2(280, 64)
+	sect_event_continue_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	sect_event_continue_button.add_theme_font_size_override("font_size", 26)
+	sect_event_continue_button.pressed.connect(_on_sect_event_continue_pressed)
+	box.add_child(sect_event_continue_button)
+	return layer
+
+
+func _make_crafting_art_style(fill_color: Color, border_color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill_color
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.border_color = border_color
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 10
+	style.content_margin_top = 6
+	style.content_margin_right = 10
+	style.content_margin_bottom = 6
+	return style
+
+
+func _make_crafting_zone(left_ratio: float, right_ratio: float, color: Color) -> ColorRect:
+	var zone := ColorRect.new()
+	zone.color = color
+	zone.anchor_left = left_ratio
+	zone.anchor_right = right_ratio
+	zone.anchor_top = 0.0
+	zone.anchor_bottom = 1.0
+	zone.offset_left = 0.0
+	zone.offset_right = 0.0
+	zone.offset_top = 0.0
+	zone.offset_bottom = 0.0
+	return zone
 
 
 func _build_log_panel() -> PanelContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1, 116)
-	_apply_panel_style(panel, Color("#18182d"))
+	panel.custom_minimum_size = Vector2(92, 58)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#18182d")
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 8
+	style.content_margin_top = 5
+	style.content_margin_right = 6
+	style.content_margin_bottom = 5
+	panel.add_theme_stylebox_override("panel", style)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 4)
 	panel.add_child(row)
 
 	label_log = _make_label("日志：等待本轮抽牌", 24, Color("#e0e0e0"))
 	label_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	label_log.custom_minimum_size = Vector2(1, 92)
-	label_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label_log.custom_minimum_size = Vector2(1, 46)
+	label_log.add_theme_font_size_override("font_size", 16)
+	label_log.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label_log.clip_text = true
+	label_log.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label_log.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(label_log)
 
 	button_log_open = Button.new()
-	button_log_open.text = "记录"
-	button_log_open.custom_minimum_size = Vector2(120, 86)
-	button_log_open.add_theme_font_size_override("font_size", 24)
+	button_log_open.text = "录"
+	button_log_open.tooltip_text = "查看完整记录"
+	button_log_open.custom_minimum_size = Vector2(42, 46)
+	button_log_open.add_theme_font_size_override("font_size", 18)
 	button_log_open.pressed.connect(_show_log_overlay)
 	row.add_child(button_log_open)
 	return panel
@@ -938,7 +1205,51 @@ func _clean_log_text(text: String) -> String:
 	var cleaned: String = text.strip_edges()
 	if cleaned.begins_with("日志："):
 		cleaned = cleaned.substr(3).strip_edges()
+	if cleaned.begins_with("日志:"):
+		cleaned = cleaned.substr(3).strip_edges()
+	cleaned = _rewrite_log_text(cleaned)
+	if _is_mechanical_log(cleaned):
+		return ""
 	return cleaned
+
+
+func _is_mechanical_log(text: String) -> bool:
+	var patterns: Array[String] = [
+		"等待对方",
+		"点按钮继续",
+		"结果停在面板",
+		"你已确认结果",
+		"你已确认整备",
+		"你选择了「",
+		"你选择「",
+		"你暂时躲开了",
+		"你气势更盛",
+		"你已注入能量",
+		"能量注入",
+		"战利品已收入囊中",
+		"已收起",
+		"正在尝试突破",
+		"斩妖结算已显示",
+	]
+	for pattern in patterns:
+		if text.contains(pattern):
+			return true
+	return false
+
+
+func _rewrite_log_text(text: String) -> String:
+	var cleaned: String = text
+	cleaned = cleaned.replace("；结果停在面板里，点按钮继续", "")
+	cleaned = cleaned.replace("，点按钮继续", "")
+	cleaned = cleaned.replace("看完结果后点按钮继续", "")
+	cleaned = cleaned.replace("，等待对手选择", "")
+	cleaned = cleaned.replace("，等待对方抉择", "")
+	cleaned = cleaned.replace("，等待对方", "")
+	cleaned = cleaned.replace("等待对方", "")
+	if cleaned.contains("你选「") and cleaned.contains("对方选「"):
+		cleaned = cleaned.replace("你选", "抉择")
+		cleaned = cleaned.replace("，对方选", "，对手")
+	return cleaned.strip_edges()
 
 
 func _show_log_overlay() -> void:
@@ -957,6 +1268,13 @@ func _hide_log_overlay() -> void:
 		log_overlay_layer.visible = false
 
 
+func _on_log_overlay_dim_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		_hide_log_overlay()
+	elif event is InputEventScreenTouch and event.pressed:
+		_hide_log_overlay()
+
+
 func _build_log_overlay() -> Control:
 	var layer := Control.new()
 	layer.visible = false
@@ -968,6 +1286,7 @@ func _build_log_overlay() -> Control:
 	dim.color = Color(0.0, 0.0, 0.0, 0.58)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(_on_log_overlay_dim_gui_input)
 	layer.add_child(dim)
 
 	var center := CenterContainer.new()
@@ -994,13 +1313,6 @@ func _build_log_overlay() -> Control:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_row.add_child(title)
 
-	var close_button := Button.new()
-	close_button.text = "关闭"
-	close_button.custom_minimum_size = Vector2(120, 56)
-	close_button.add_theme_font_size_override("font_size", 24)
-	close_button.pressed.connect(_hide_log_overlay)
-	title_row.add_child(close_button)
-
 	label_log_overlay_body = RichTextLabel.new()
 	label_log_overlay_body.custom_minimum_size = Vector2(1, maxf(360.0, panel_height - 116.0))
 	label_log_overlay_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1021,7 +1333,12 @@ func _full_log_text() -> String:
 	var lines: Array[String] = []
 	var start_index: int = maxi(0, log_history.size() - 40)
 	for i in range(start_index, log_history.size()):
-		lines.append(str(i + 1) + ". " + log_history[i])
+		var cleaned_line: String = _clean_log_text(str(log_history[i]))
+		if cleaned_line == "":
+			continue
+		lines.append(str(lines.size() + 1) + ". " + cleaned_line)
+	if lines.is_empty():
+		return "暂无记录。"
 	return "\n\n".join(lines)
 
 
@@ -1888,10 +2205,6 @@ func _update_player_info() -> void:
 	_update_identity_labels(label_my_name, label_my_sect_badge, label_my_resonance_badge, my_player, false)
 	label_my_stats.text = "寿 " + _format_int_value(my_player.shou_yuan) + "   灵 " + _format_int_value(my_player.ling_li) + "   石 " + _format_int_value(my_player.ling_shi) + "   血 " + _format_int_value(my_player.qi_xue) + "   " + GameManager.get_cultivation_stage_name(my_player)
 	_update_power_label(label_my_power, my_player, false)
-	if label_build_progress != null:
-		var show_build_progress: bool = _has_visible_build_progress(my_player)
-		label_build_progress.visible = show_build_progress
-		label_build_progress.text = _format_build_progress(my_player, true) if show_build_progress else ""
 	_update_build_route_visualizer(my_player)
 	_update_cultivation_bars(my_player)
 	_update_breakthrough_button(my_player)
@@ -1906,7 +2219,11 @@ func _update_player_info() -> void:
 	label_backpack.text = "背包：" + backpack_counts_text + "    灵石：" + _format_int_value(my_player.ling_shi)
 	if button_backpack != null:
 		var fixed_pending_mark: String = "!" if GameManager.has_pending_backpack_item(my_player.peer_id) else ""
-		button_backpack.text = "背包" + fixed_pending_mark + " " + str(my_player.backpack.size()) + "/" + str(GameManager.get_total_backpack_capacity()) + "\n" + backpack_counts_text
+		var counts: Dictionary = GameManager.get_backpack_counts(my_player)
+		var short_counts: String = "功" + str(int(counts.get("technique", 0))) + "/" + str(GameManager.MAX_BACKPACK_TECHNIQUES) + " 法" + str(int(counts.get("treasure", 0))) + "/" + str(GameManager.MAX_BACKPACK_TREASURES) + " 伴" + str(int(counts.get("companion", 0))) + "/" + str(GameManager.MAX_BACKPACK_COMPANIONS) + " 材" + str(int(counts.get("material", 0))) + "/" + str(GameManager.MAX_BACKPACK_MATERIALS)
+		button_backpack.text = "背包" + fixed_pending_mark + " " + str(my_player.backpack.size()) + "/" + str(GameManager.get_total_backpack_capacity()) + "\n" + short_counts
+	_update_alchemy_button(my_player)
+	_update_refining_button(my_player)
 	_update_backpack_block_label(my_player)
 	_update_treasure_list(my_player)
 	_update_backpack_list(my_player)
@@ -1924,6 +2241,7 @@ func _update_power_label(label: Label, player: PlayerData, is_enemy: bool) -> vo
 	if previous >= 0 and power != previous:
 		arrow = " ↑" if power > previous else " ↓"
 	label.text = "战力：" + _format_int_value(power) + arrow
+	label.tooltip_text = GameManager.get_visible_combat_power_formula_text()
 	label.add_theme_color_override("font_color", Color("#80c080") if arrow == " ↑" else (Color("#ff8080") if arrow == " ↓" else Color("#f0c040")))
 	if is_enemy:
 		last_enemy_power = power
@@ -1938,22 +2256,17 @@ func _format_build_progress(player: PlayerData, vertical: bool = false) -> Strin
 	var level: int = int(progress.get("level", 0))
 	var level_name: String = str(progress.get("level_name", "未成"))
 	var next_count: int = int(progress.get("next_count", 2))
+	var target_count: int = 2 if level <= 0 else next_count
+	var short_goal: String = "差" + str(maxi(0, target_count - count)) + "件"
 	if level <= 0:
-		return ""
+		if count <= 0:
+			return ""
+		if vertical:
+			return cultivation_type + "\n" + str(count) + "/2"
+		return "修行羁绊：" + cultivation_type + " " + str(count) + "/2｜差" + str(maxi(0, 2 - count)) + "件质变"
 	if vertical:
-		return cultivation_type + "\n" + str(count) + "/" + str(GameManager.MAX_CULTIVATION_SET_COUNT) + "\n" + level_name
-	return "修行羁绊：" + cultivation_type + " " + str(count) + "/" + ("满" if level >= 4 else str(next_count)) + "｜" + level_name
-
-
-func _has_visible_build_progress(player: PlayerData) -> bool:
-	if player == null:
-		return false
-	var routes: Dictionary = GameManager.get_affix_build_routes(player)
-	for cultivation_type in routes:
-		var route: Dictionary = routes[cultivation_type] as Dictionary
-		if int(route.get("level", 0)) > 0:
-			return true
-	return false
+		return cultivation_type + "\n" + str(count) + "/" + ("满" if level >= 4 else str(next_count)) + "\n" + level_name
+	return "修行羁绊：" + cultivation_type + " " + str(count) + "/" + ("满" if level >= 4 else str(next_count)) + "｜" + level_name + ("｜已归一" if level >= 4 else "｜" + short_goal)
 
 
 func _build_route_visualizer() -> GridContainer:
@@ -1993,7 +2306,7 @@ func _update_build_route_visualizer(player: PlayerData) -> void:
 		var button: Button = build_route_buttons[sect_name] as Button
 		var route: Dictionary = routes.get(sect_name, {}) as Dictionary
 		var count: int = int(route.get("count", 0))
-		var active: bool = int(route.get("level", 0)) > 0
+		var active: bool = count > 0
 		button.visible = active
 		if not active:
 			continue
@@ -2058,9 +2371,9 @@ func _on_build_route_pressed(sect_name: String) -> void:
 	var player: PlayerData = _get_my_player()
 	build_info_dialog.title = "修行羁绊"
 	build_info_dialog.dialog_text = GameManager.get_affix_guide_text(sect_name, player)
-	build_info_dialog.min_size = Vector2i(520, 330)
+	build_info_dialog.min_size = Vector2i(520, 300)
 	build_info_dialog.add_theme_font_size_override("font_size", 22)
-	build_info_dialog.popup_centered(Vector2i(520, 330))
+	build_info_dialog.popup_centered(Vector2i(520, 300))
 
 
 func _sect_short_name(sect_name: String) -> String:
@@ -2105,16 +2418,19 @@ func _update_identity_labels(name_label: Label, sect_label: Label, resonance_lab
 	if player == null:
 		return
 	var name_font_size: int = 20 if compact else 24
+	var badge_font_size: int = name_font_size
 	name_label.visible = true
 	name_label.text = player.player_name
 	name_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	name_label.add_theme_font_size_override("font_size", name_font_size)
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.clip_text = false
 	name_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	name_label.custom_minimum_size = Vector2(_text_min_width(player.player_name, name_font_size, 104.0 if compact else 128.0), 30 if compact else 34)
 	var identity_level: int = int(player.final_attributes.get("identity_level", 0))
 	var identity_sect: String = str(player.final_attributes.get("identity_sect", ""))
 	var show_identity: bool = identity_level > 0 and GameManager.SECT_TYPES.has(identity_sect)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if show_identity else HORIZONTAL_ALIGNMENT_CENTER
+	name_label.custom_minimum_size = Vector2(_text_min_width(player.player_name, name_font_size, 78.0 if compact else 88.0), 30 if compact else 34)
 	sect_label.visible = show_identity
 	if not show_identity:
 		if resonance_label != null:
@@ -2122,12 +2438,14 @@ func _update_identity_labels(name_label: Label, sect_label: Label, resonance_lab
 		return
 	sect_label.text = _identity_badge_text(player, compact)
 	sect_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	sect_label.add_theme_color_override("font_color", Color(GameManager.get_identity_color_hex(player)))
-	var sect_font_size: int = 14 if compact else 16
-	sect_label.add_theme_font_size_override("font_size", sect_font_size)
+	var identity_color: Color = Color(GameManager.get_identity_color_hex(player)).lerp(Color("#f0c040"), 0.35)
+	sect_label.add_theme_color_override("font_color", identity_color)
+	sect_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	sect_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sect_label.add_theme_font_size_override("font_size", badge_font_size)
 	sect_label.clip_text = false
 	sect_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	sect_label.custom_minimum_size = Vector2(_text_min_width(sect_label.text, sect_font_size, 88.0 if compact else 118.0), 36)
+	sect_label.custom_minimum_size = Vector2(_text_min_width(sect_label.text, badge_font_size, 92.0 if compact else 118.0), 34 if compact else 38)
 	if resonance_label != null:
 		resonance_label.visible = false
 
@@ -2143,7 +2461,7 @@ func _identity_badge_text(player: PlayerData, compact: bool) -> String:
 	if not GameManager.SECT_TYPES.has(sect_name) or title == "":
 		return ""
 	var sect_text: String = _sect_short_name(sect_name) if compact else sect_name
-	return "【" + sect_text + "·" + title + "】"
+	return sect_text + "·" + title
 
 
 func _sect_badge_text(sect_name: String, _compact: bool = false) -> String:
@@ -2435,7 +2753,7 @@ func _update_breakthrough_button(player: PlayerData) -> void:
 	var chance_suffix: String = ""
 	if breakthrough_type == "minor" or breakthrough_type == "major":
 		chance_suffix = " " + str(int(round(float(status.get("success_chance", 0.0)) * 100.0))) + "%"
-	var blocked_state: bool = GameManager.current_state == GameManager.GameState.REST or GameManager.current_state == GameManager.GameState.AUCTION or GameManager.current_state == GameManager.GameState.TRIBULATION or GameManager.current_state == GameManager.GameState.BATTLE or GameManager.current_state == GameManager.GameState.DUEL or GameManager.current_state == GameManager.GameState.ENDING
+	var blocked_state: bool = GameManager.current_state == GameManager.GameState.REST or GameManager.current_state == GameManager.GameState.AUCTION or GameManager.current_state == GameManager.GameState.TRIBULATION or GameManager.current_state == GameManager.GameState.BATTLE or GameManager.current_state == GameManager.GameState.DUEL or GameManager.current_state == GameManager.GameState.SECT_EVENT or GameManager.current_state == GameManager.GameState.ENDING
 	if target_name == "":
 		button_breakthrough.text = "圆满"
 		button_breakthrough.disabled = true
@@ -2450,6 +2768,39 @@ func _update_breakthrough_button(player: PlayerData) -> void:
 		button_breakthrough.text = ("突破！" if can_breakthrough else "突破") + chance_suffix
 	button_breakthrough.disabled = blocked_state
 	button_breakthrough.modulate = Color("#f0c040") if can_breakthrough else Color(0.85, 0.85, 0.9, 1.0)
+
+
+func _update_alchemy_button(player: PlayerData) -> void:
+	if button_alchemy == null or player == null:
+		return
+	var status: Dictionary = GameManager.get_alchemy_status(player)
+	var label: String = str(status.get("label", "炼丹"))
+	var material_count: int = int(status.get("material_count", 0))
+	var button_label: String = label.replace("炼", "") if label != "炼丹" else "炼丹"
+	if not bool(status.get("can", false)) and material_count <= 0:
+		button_label = "缺灵草"
+	button_alchemy.text = button_label + "\n草 " + str(material_count)
+	button_alchemy.disabled = not bool(status.get("can", false))
+	button_alchemy.tooltip_text = "消耗灵草开炉炼丹：气感+机缘会放宽火候并提升成色。"
+	button_alchemy.modulate = Color("#f0c040") if bool(status.get("can", false)) else Color(0.65, 0.65, 0.7, 1.0)
+
+
+func _update_refining_button(player: PlayerData) -> void:
+	if button_refining == null or player == null:
+		return
+	var status: Dictionary = GameManager.get_refining_status(player)
+	var material_count: int = int(status.get("material_count", 0))
+	var refine_label: String = "炼器"
+	if not bool(status.get("can", false)):
+		var reason: String = str(status.get("reason", ""))
+		if reason == "先装备法宝":
+			refine_label = "先法宝"
+		elif material_count <= 0:
+			refine_label = "缺矿材"
+	button_refining.text = refine_label + "\n矿 " + str(material_count)
+	button_refining.disabled = not bool(status.get("can", false))
+	button_refining.tooltip_text = "消耗矿材开炉炼器：体魄+经商会放宽火候并提升成色。"
+	button_refining.modulate = Color("#f0c040") if bool(status.get("can", false)) else Color(0.65, 0.65, 0.7, 1.0)
 
 
 func _realm_ling_li_req(realm: String) -> int:
@@ -2467,7 +2818,7 @@ func _update_backpack_block_label(player: PlayerData) -> void:
 
 	var pending: Dictionary = GameManager.get_pending_backpack_item(player.peer_id)
 	if pending.is_empty():
-		for kind in ["technique", "treasure", "companion"]:
+		for kind in ["technique", "treasure", "companion", "material"]:
 			var count: int = int(GameManager.get_backpack_counts(player).get(kind, 0))
 			var limit: int = GameManager.get_backpack_kind_limit(kind)
 			if count > limit:
@@ -2537,7 +2888,7 @@ func _card_should_show_quality(card: Dictionary) -> bool:
 		return false
 	var effect_type: String = str(card.get("effect_type", ""))
 	var kind: String = str(card.get("kind", card.get("card_kind", "")))
-	return effect_type in ["technique", "treasure"] or kind in ["technique", "treasure"]
+	return effect_type in ["technique", "treasure", "alchemy_material", "craft_material"] or kind in ["technique", "treasure", "material"]
 
 
 func _mark_card_settled(index: int) -> void:
@@ -2598,6 +2949,8 @@ func _hide_result_toast() -> void:
 		result_toast.visible = false
 		if result_toast.has_meta("local_only"):
 			result_toast.remove_meta("local_only")
+		if result_toast.has_meta("local_log_message"):
+			result_toast.remove_meta("local_log_message")
 	_set_result_card_mode(false)
 	if btn_continue_result != null:
 		btn_continue_result.disabled = false
@@ -2631,8 +2984,8 @@ func _show_pending_battle_reward_feedback() -> void:
 	result_toast.mouse_filter = Control.MOUSE_FILTER_STOP
 	result_toast.set_meta("local_only", true)
 	result_toast.move_to_front()
-	result_toast.modulate.a = 0.0
-	result_toast.scale = Vector2(0.94, 0.94)
+	result_toast.modulate.a = 1.0
+	result_toast.scale = Vector2(0.98, 0.98)
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_BACK)
 	tween.set_ease(Tween.EASE_OUT)
@@ -2706,8 +3059,8 @@ func _show_result_feedback(my_result: Dictionary, enemy_result: Dictionary, card
 	result_toast.z_index = 240
 	result_toast.mouse_filter = Control.MOUSE_FILTER_STOP
 	result_toast.move_to_front()
-	result_toast.modulate.a = 0.0
-	result_toast.scale = Vector2(0.94, 0.94)
+	result_toast.modulate.a = 1.0
+	result_toast.scale = Vector2(0.98, 0.98)
 
 	var tween: Tween = create_tween()
 	tween.set_parallel(true)
@@ -2724,9 +3077,12 @@ func _on_continue_result_pressed() -> void:
 		return
 
 	if result_toast != null and bool(result_toast.get_meta("local_only", false)):
+		var local_log_message: String = str(result_toast.get_meta("local_log_message", "战利品已收入囊中"))
 		result_toast.remove_meta("local_only")
+		if result_toast.has_meta("local_log_message"):
+			result_toast.remove_meta("local_log_message")
 		_hide_result_toast()
-		label_log.text = "日志：战利品已收入囊中"
+		label_log.text = "日志：" + local_log_message
 		return
 
 	if GameManager.current_state == GameManager.GameState.REST:
@@ -2903,7 +3259,7 @@ func _bargain_judgement_text(my_choice: String, enemy_choice: String, card: Dict
 		if my_choice == "抢" and enemy_choice == "抢":
 			return "双方都抢 → 这张牌破碎，谁也拿不到"
 		if my_choice == "让" and enemy_choice == "让":
-			if str(card.get("effect_type", "")) in ["technique", "treasure", "companion", "dan"]:
+			if str(card.get("effect_type", "")) in ["technique", "treasure", "companion", "dan", "alchemy_material", "craft_material"]:
 				return "双方都让 → 无法平分，机缘消散，各得灵石补偿"
 			return "双方都让 → 天道酬和，各得一半，魅力高者多得"
 		if my_choice == "抢" and enemy_choice == "让":
@@ -3129,7 +3485,7 @@ func _empty_result_text(card: Dictionary, message: String) -> String:
 			"dan":
 				return "丹药毁去，无人获得"
 			"auction":
-				return "拍卖会散场，无人入手"
+				return "坊市收摊，无人入手"
 			_:
 				return "机缘消散，无人获得"
 	if message != "":
@@ -3170,7 +3526,7 @@ func _clean_card_display_text(text: String) -> String:
 
 func _is_build_related_card(card: Dictionary) -> bool:
 	var effect_type: String = str(card.get("effect_type", ""))
-	return effect_type in ["technique", "treasure", "companion", "adventure"]
+	return effect_type in ["technique", "treasure", "companion", "alchemy_material", "craft_material", "adventure"]
 
 
 func _result_combined_message(result: Dictionary) -> String:
@@ -3362,10 +3718,14 @@ func _effect_text(card: Dictionary, value: float, is_gain: bool) -> String:
 			return "法宝入手"
 		"dan":
 			return "丹药入手"
+		"alchemy_material":
+			return "灵草入手"
+		"craft_material":
+			return "矿材入手"
 		"companion":
 			return "伙伴同行"
 		"auction":
-			return "进入拍卖会"
+			return "进入坊市"
 		"adventure":
 			return "秘境探索"
 		"body_tempering":
@@ -3561,6 +3921,19 @@ func _hide_backpack_overlay() -> void:
 	backpack_overlay_selected_metadata.clear()
 
 
+func _on_backpack_overlay_dim_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event: InputEventMouseButton = event as InputEventMouseButton
+		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			_hide_backpack_overlay()
+			accept_event()
+	elif event is InputEventScreenTouch:
+		var touch_event: InputEventScreenTouch = event as InputEventScreenTouch
+		if touch_event.pressed:
+			_hide_backpack_overlay()
+			accept_event()
+
+
 func _update_backpack_overlay_list(player: PlayerData) -> void:
 	if backpack_overlay_list == null or player == null:
 		return
@@ -3593,9 +3966,9 @@ func _update_backpack_overlay_list(player: PlayerData) -> void:
 		backpack_overlay_list.add_item("背包空空", _make_backpack_empty_icon())
 		var empty_index: int = backpack_overlay_list.get_item_count() - 1
 		backpack_overlay_list.set_item_disabled(empty_index, true)
-		_clear_backpack_overlay_selection("背包里还没有牌。抽到功法、法宝、伙伴后会先进这里。")
+		_clear_backpack_overlay_selection("背包里还没有牌。抽到功法、法宝、伙伴、材料后会先进这里。")
 	else:
-		_clear_backpack_overlay_selection("点选一张牌，然后选择装备位置或丢弃。")
+		_clear_backpack_overlay_selection("点选一张牌，然后选择装备、倒卖或丢弃。")
 
 
 func _on_backpack_overlay_list_gui_input(event: InputEvent) -> void:
@@ -3647,6 +4020,8 @@ func _backpack_kind_color(kind: String) -> Color:
 			return Color("#f0c040")
 		"companion":
 			return Color("#c080e0")
+		"material":
+			return Color("#80c080")
 		_:
 			return Color("#8a8070")
 
@@ -3678,7 +4053,7 @@ func _clear_backpack_overlay_selection(message: String) -> void:
 		label_backpack_overlay_detail.text = message
 	_rebuild_backpack_action_buttons({})
 	if button_backpack_overlay_sell != null:
-		button_backpack_overlay_sell.visible = _is_auction_active()
+		button_backpack_overlay_sell.visible = true
 		button_backpack_overlay_sell.disabled = true
 		button_backpack_overlay_sell.text = "倒卖"
 	if button_backpack_overlay_discard != null:
@@ -3700,8 +4075,8 @@ func _on_backpack_overlay_item_selected(index: int) -> void:
 		label_backpack_overlay_detail.text = _describe_inventory_entry(entry, source, int(metadata.get("index", -1)))
 	_rebuild_backpack_action_buttons(metadata)
 	if button_backpack_overlay_sell != null:
-		button_backpack_overlay_sell.visible = _is_auction_active()
-		var can_sell: bool = _is_auction_active() and _can_sell_backpack_overlay_entry(metadata)
+		button_backpack_overlay_sell.visible = true
+		var can_sell: bool = _can_sell_backpack_overlay_entry(metadata)
 		button_backpack_overlay_sell.disabled = not can_sell
 		button_backpack_overlay_sell.text = "倒卖 +" + str(_estimate_sell_value(entry)) if can_sell else "不能倒卖"
 	if button_backpack_overlay_discard != null:
@@ -3744,29 +4119,16 @@ func _add_backpack_target_button(text: String, target_type: String, target_index
 func _can_sell_backpack_overlay_entry(metadata: Dictionary) -> bool:
 	var entry: Dictionary = metadata.get("entry", {}) as Dictionary
 	var kind: String = str(entry.get("kind", ""))
-	return kind in ["technique", "treasure", "companion"]
+	return kind in ["technique", "treasure", "companion", "material"]
 
 
 func _is_auction_active() -> bool:
-	return GameManager.current_state == GameManager.GameState.AUCTION or (auction_panel != null and auction_panel.visible)
+	return false
 
 
 func _estimate_sell_value(entry: Dictionary) -> int:
-	var data: Dictionary = entry.get("data", {}) as Dictionary
-	var quality: String = str(data.get("quality", "筑基级"))
-	var kind: String = str(entry.get("kind", ""))
-	var base_value: int = 120
-	match kind:
-		"technique":
-			base_value = 260
-		"treasure":
-			base_value = 240
-		"companion":
-			base_value = 120
-	var multiplier: float = float(GameManager.QUALITY_MULTIPLIER.get(quality, 1.0))
 	var player: PlayerData = _get_my_player()
-	var business_bonus: float = 1.0 + float(player.stats.get("经商", 0)) * 0.08 if player != null else 1.0
-	return maxi(1, int(round(float(base_value) * multiplier * business_bonus)))
+	return GameManager.get_market_sell_value_for_entry(player, entry)
 
 
 func _on_backpack_overlay_equip_pressed(target_type: String, target_index: int) -> void:
@@ -3904,6 +4266,8 @@ func _format_backpack_entry_short(entry: Dictionary) -> String:
 	elif kind == "companion":
 		var bond_value: int = int(data.get("bond", 0))
 		suffix = "\n" + GameManager.get_companion_sect(data) + "｜" + GameManager.get_companion_bond_stage_text_for_data(data) + " " + str(bond_value) + "/" + str(GameManager.get_companion_bond_max(data))
+	elif kind == "material":
+		suffix = "\n" + ("炼器" if str(data.get("material_type", "")) == "craft" else "炼丹")
 	return kind_name + "\n" + str(data.get("name", "未知")) + suffix
 
 
@@ -3949,6 +4313,8 @@ func _item_kind_name(kind: String) -> String:
 			return "法宝"
 		"companion":
 			return "同伴"
+		"material":
+			return "材料"
 		_:
 			return "物品"
 
@@ -4039,49 +4405,78 @@ func _on_breakthrough_feedback(data: Dictionary) -> void:
 	_update_player_info()
 	var peer_id: int = int(data.get("peer_id", 0))
 	var my_player: PlayerData = _get_my_player()
-	if my_player != null and peer_id == my_player.peer_id:
-		var message: String = str(data.get("message", "暂时无法突破"))
-		label_log.text = "日志：" + message
-		if message.contains("失败"):
-			_flash_edges()
-			UIEffects.screen_shake(self, 7.0, 0.28)
-			_spawn_event_cut_in("突破失败", "灵气逆冲，这一口血先咽下。", Color("#c04040"))
-		elif message.contains("突破至"):
+	var is_my_feedback: bool = my_player != null and peer_id == my_player.peer_id
+	var is_known_feedback: bool = peer_id == GameManager.player_a.peer_id or peer_id == GameManager.player_b.peer_id
+	if not is_my_feedback and not is_known_feedback:
+		return
+	var message: String = str(data.get("message", "暂时无法突破"))
+	label_log.text = "日志：" + message
+	if message.contains("失败"):
+		_flash_edges()
+		UIEffects.screen_shake(self, 7.0 if is_my_feedback else 4.0, 0.28)
+		_spawn_event_cut_in("突破失败" if is_my_feedback else "同道受挫", "灵气逆冲，破境未成。", Color("#c04040"))
+	elif message.contains("突破至"):
+		if is_my_feedback:
 			_flash_rainbow()
-			UIEffects.screen_shake(self, 4.0, 0.18)
-			_spawn_event_cut_in("破境成功", "这一层天，终于被你踏过去。", Color("#f0c040"))
+		UIEffects.screen_shake(self, 4.0, 0.18)
+		_spawn_event_cut_in("破境成功" if is_my_feedback else "同道破境", "境界一开，道途又远一程。", Color("#f0c040"))
 
 
 func _on_auction_started(data: Dictionary) -> void:
 	_update_player_info()
 	_hide_result_toast()
+	if btn_inject_shouyuan != null:
+		btn_inject_shouyuan.visible = false
+	cards_dealt = true
+	reveal_playback_active = false
+	pending_card_reveals.clear()
 	_set_choice_enabled(false)
 	label_waiting.visible = false
 	auction_panel.visible = true
 	_set_auction_buttons_enabled(true)
+	var card: Dictionary = data.get("card", {}) as Dictionary
+	_force_show_current_lottery_card(int(data.get("index", GameManager.current_bargain_index)), card)
 
 	var lots: Array = data.get("lots", []) as Array
+	if lots.is_empty():
+		var card_for_lots: Dictionary = data.get("card", {}) as Dictionary
+		lots = GameManager.generate_auction_lots(str(card_for_lots.get("quality", "筑基级")))
 	for i in range(auction_lot_labels.size()):
 		var lot_label: Label = auction_lot_labels[i] as Label
 		if i < lots.size():
 			var lot: Dictionary = lots[i] as Dictionary
 			lot_label.text = _auction_lot_text(lot)
+			auction_bid_buttons[i].disabled = false
+			auction_haggle_buttons[i].disabled = false
 		else:
-			lot_label.text = "暂无拍品"
+			lot_label.text = "暂无货品"
 			auction_bid_buttons[i].disabled = true
 			auction_haggle_buttons[i].disabled = true
 
-	label_round_info.text = "第 " + str(GameManager.round_number) + " 轮 · 拍卖会"
-	label_current_ji_yuan.text = "本张：拍卖会开张"
-	label_current_calamity.text = "选择拍品，讲价或出价"
-	var card: Dictionary = data.get("card", {}) as Dictionary
-	var entry_message: String = str(card.get("auction_entry_message", "拍卖会开张，灵石终于有地方花了"))
-	label_auction_status.text = entry_message + "\n缺灵石就点「倒卖背包」，只在拍卖会开放。"
+	label_round_info.text = "第 " + str(GameManager.round_number) + " 轮 · 坊市"
+	label_current_ji_yuan.text = "本张：坊市开张"
+	label_current_calamity.text = "选择货品，讲价或出价"
+	var entry_message: String = str(card.get("auction_entry_message", "坊市开张，灵石终于有地方花了"))
+	label_auction_status.text = entry_message
 	label_log.text = "日志：" + entry_message
 
 
+func _force_show_current_lottery_card(index: int, card: Dictionary) -> void:
+	if index < 0 or card.is_empty():
+		return
+	if _visible_card_source_index() != index:
+		_render_single_lottery_card(index, card, true)
+	elif not lottery_cards.is_empty():
+		var card_node: DaoCard = lottery_cards[0]
+		card_node.flipping = false
+		card_node.scale = card_node.get_meta("base_scale", Vector2.ONE) as Vector2
+		card_node.setup_card(card, true)
+	revealed_visual_indices[index] = true
+	_focus_card(index)
+
+
 func _auction_lot_text(lot: Dictionary) -> String:
-	var lot_name: String = str(lot.get("name", "拍品"))
+	var lot_name: String = str(lot.get("name", "货品"))
 	var desc: String = _shorten_result_message(str(lot.get("desc", "")), 18)
 	var price: int = int(lot.get("price", 0))
 	return lot_name + "\n" + desc + "｜" + str(price) + "灵石"
@@ -4092,14 +4487,16 @@ func _on_auction_action_pressed(lot_index: int, mode: String) -> void:
 	if mode == "pass":
 		label_auction_status.text = "你选择观望，等待对方..."
 	else:
-		var mode_text: String = "讲价" if mode == "haggle" else "出价竞拍"
+		var mode_text: String = "讲价" if mode == "haggle" else "出价"
 		label_auction_status.text = "已选择" + mode_text + "，等待对方..."
 	_send_auction_action({"lot_index": lot_index, "mode": mode})
 
 
 func _send_auction_action(data: Dictionary) -> void:
+	var my_player: PlayerData = _get_my_player()
+	var peer_id: int = my_player.peer_id if my_player != null and my_player.peer_id > 0 else 1
 	if NetworkManager.is_host:
-		GameManager.on_auction_action_received(1, data)
+		GameManager.on_auction_action_received(peer_id, data)
 	else:
 		NetworkManager.send_message("auction_action", data)
 
@@ -4110,10 +4507,10 @@ func _on_auction_ended(data: Dictionary) -> void:
 	_set_result_card_mode(true)
 	var my_player: PlayerData = _get_my_player()
 	var messages: Dictionary = data.get("messages", {}) as Dictionary
-	var message: String = "拍卖会散场"
+	var message: String = "坊市收摊"
 	if my_player != null:
 		message = str(messages.get(str(my_player.peer_id), message))
-	label_result_title.text = "拍卖会散场"
+	label_result_title.text = "坊市收摊"
 	label_result_detail.text = message
 	result_toast.visible = true
 	latest_settled_index = int(data.get("index", -1))
@@ -4166,6 +4563,7 @@ func _refresh_rest_panel(data: Dictionary = {}) -> void:
 		"背包：" + GameManager.get_backpack_counts_text(player),
 		"上场：功法 " + str(player.techniques.size()) + "/" + str(GameManager.MAX_EQUIPPED_TECHNIQUES) + "  法宝 " + str(player.treasures.size()) + "/1  伙伴 " + str(player.companions.size()) + "/" + str(GameManager.MAX_COMPANIONS),
 		_format_build_progress(player),
+		GameManager.get_cultivation_build_hint(player),
 	]
 	label_result_detail.text = "\n".join(detail_lines)
 	result_toast.visible = true
@@ -4200,6 +4598,142 @@ func _on_rest_confirm_pressed() -> void:
 		GameManager.on_rest_confirm_received(1, payload)
 	else:
 		NetworkManager.send_message("rest_confirm", payload)
+
+
+func _on_sect_event_started(data: Dictionary) -> void:
+	_show_sect_event_overlay(data)
+
+
+func _on_sect_event_updated(data: Dictionary) -> void:
+	_show_sect_event_overlay(data)
+
+
+func _on_sect_event_finished(_data: Dictionary) -> void:
+	sect_event_countdown_active = false
+	sect_event_choice_sent = false
+	sect_event_continue_sent = false
+	if sect_event_layer != null:
+		sect_event_layer.visible = false
+
+
+func _show_sect_event_overlay(data: Dictionary) -> void:
+	if sect_event_layer == null:
+		return
+	_update_player_info()
+	_hide_auction_panel()
+	_hide_result_toast()
+	_set_choice_enabled(false)
+	if backpack_overlay_layer != null:
+		backpack_overlay_layer.visible = false
+	if crafting_layer != null:
+		crafting_layer.visible = false
+	var phase: String = str(data.get("phase", "choice"))
+	var incoming_id: int = int(data.get("id", -1))
+	if incoming_id != sect_event_current_id:
+		sect_event_current_id = incoming_id
+		sect_event_countdown_remaining = float(data.get("choice_seconds", 10.0))
+	sect_event_layer.visible = true
+	sect_event_layer.move_to_front()
+	if label_round_info != null:
+		label_round_info.text = "第 " + str(GameManager.round_number) + " 轮 · " + str(data.get("title", "宗门事件"))
+	if sect_event_title_label != null:
+		sect_event_title_label.text = str(data.get("title", "宗门事件"))
+	if sect_event_desc_label != null:
+		sect_event_desc_label.text = str(data.get("desc", "宗门风云忽起。"))
+	var my_player: PlayerData = _get_my_player()
+	var choices: Dictionary = data.get("choices", {}) as Dictionary
+	var my_key: String = str(my_player.peer_id) if my_player != null else ""
+	if phase == "choice":
+		sect_event_choice_sent = my_key != "" and choices.has(my_key)
+		sect_event_continue_sent = false
+		sect_event_countdown_active = not sect_event_choice_sent
+		_set_sect_event_choice_buttons(not sect_event_choice_sent)
+		if sect_event_continue_button != null:
+			sect_event_continue_button.visible = false
+		if sect_event_body_label != null:
+			var body_lines: Array[String] = []
+			body_lines.append(str(data.get("rules", "")))
+			body_lines.append("")
+			body_lines.append("双方有10秒选择；超时默认不参加。")
+			if sect_event_choice_sent:
+				body_lines.append("你已选择：" + ("参加" if bool(choices.get(my_key, false)) else "不参加") + "，等待对方。")
+			sect_event_body_label.text = "\n".join(body_lines)
+		_update_sect_event_countdown(0.0)
+	else:
+		sect_event_countdown_active = false
+		_set_sect_event_choice_buttons(false)
+		if sect_event_join_button != null:
+			sect_event_join_button.visible = false
+		if sect_event_skip_button != null:
+			sect_event_skip_button.visible = false
+		var votes: Dictionary = data.get("continue_votes", {}) as Dictionary
+		sect_event_continue_sent = my_key != "" and votes.has(my_key)
+		if sect_event_continue_button != null:
+			sect_event_continue_button.visible = true
+			sect_event_continue_button.disabled = sect_event_continue_sent
+			sect_event_continue_button.text = "已确认，等待对方" if sect_event_continue_sent else "继续修行"
+		if sect_event_countdown_label != null:
+			sect_event_countdown_label.text = "宗门战报"
+		if sect_event_body_label != null:
+			var result: Dictionary = data.get("result", {}) as Dictionary
+			var lines: Array = result.get("lines", []) as Array
+			var body: Array[String] = [str(result.get("summary", data.get("message", "宗门事件已结算。")))]
+			for line in lines:
+				body.append("· " + str(line))
+			sect_event_body_label.text = "\n".join(body)
+	if label_log != null:
+		label_log.text = "日志：" + str(data.get("message", str(data.get("title", "宗门事件"))))
+
+
+func _set_sect_event_choice_buttons(enabled: bool) -> void:
+	if sect_event_join_button != null:
+		sect_event_join_button.visible = true
+		sect_event_join_button.disabled = not enabled
+	if sect_event_skip_button != null:
+		sect_event_skip_button.visible = true
+		sect_event_skip_button.disabled = not enabled
+
+
+func _update_sect_event_countdown(delta: float) -> void:
+	if not sect_event_countdown_active:
+		return
+	sect_event_countdown_remaining = maxf(0.0, sect_event_countdown_remaining - delta)
+	if sect_event_countdown_label != null:
+		sect_event_countdown_label.text = str(int(ceil(sect_event_countdown_remaining))) + "秒后默认不参加"
+	if sect_event_countdown_remaining <= 0.0:
+		_on_sect_event_choice_pressed(false, true)
+
+
+func _on_sect_event_choice_pressed(participate: bool, timed_out: bool = false) -> void:
+	if sect_event_choice_sent:
+		return
+	sect_event_choice_sent = true
+	sect_event_countdown_active = false
+	_set_sect_event_choice_buttons(false)
+	if sect_event_countdown_label != null:
+		sect_event_countdown_label.text = "已选择：" + ("参加" if participate else "不参加")
+	if label_log != null:
+		label_log.text = "日志：你选择" + ("参加宗门事件" if participate else "暂不参加宗门事件")
+	var payload: Dictionary = {"participate": participate, "timeout": timed_out}
+	if NetworkManager.is_host:
+		GameManager.on_sect_event_choice_received(1, payload)
+	else:
+		NetworkManager.send_message("sect_event_choice", payload)
+
+
+func _on_sect_event_continue_pressed() -> void:
+	if sect_event_continue_sent:
+		return
+	sect_event_continue_sent = true
+	if sect_event_continue_button != null:
+		sect_event_continue_button.disabled = true
+		sect_event_continue_button.text = "等待对方确认..."
+	if label_log != null:
+		label_log.text = "日志：你已读完宗门战报"
+	if NetworkManager.is_host:
+		GameManager.on_sect_event_continue_received(1, {})
+	else:
+		NetworkManager.send_message("sect_event_continue", {})
 
 
 func _hide_auction_panel() -> void:
@@ -4243,7 +4777,7 @@ func _on_market_pressed() -> void:
 	var backpack_full: bool = player.backpack_capacity >= GameManager.MAX_BACKPACK_CAPACITY
 	var backpack_text: String = "背包已达上限 " + str(GameManager.MAX_BACKPACK_CAPACITY) if backpack_full else "扩充背包：容量 +1 / " + str(GameManager.MARKET_BACKPACK_COST) + "灵石"
 	backpack_full = true
-	backpack_text = "背包固定：功法8 / 法宝4 / 伙伴6"
+	backpack_text = "背包固定：功法8 / 法宝4 / 伙伴6 / 材料8"
 	_add_market_item(backpack_text, 3, backpack_full or player.ling_shi < GameManager.MARKET_BACKPACK_COST)
 	market_menu.position = get_viewport().get_mouse_position()
 	market_menu.popup()
@@ -4271,18 +4805,239 @@ func _on_market_menu_pressed(id: int) -> void:
 	_send_market_action(action)
 
 
-func _on_save_pressed() -> void:
-	var message: String = GameManager.save_game(true)
-	label_log.text = "日志：" + message
-	_capture_log_change(label_log.text)
+func _on_alchemy_pressed() -> void:
+	var player: PlayerData = _get_my_player()
+	if player != null:
+		var status: Dictionary = GameManager.get_alchemy_status(player)
+		if not bool(status.get("can", false)):
+			label_log.text = "日志：" + str(status.get("reason", "暂时不能炼丹"))
+			_update_alchemy_button(player)
+			return
+	_start_crafting_minigame("alchemy")
 
 
-func _send_market_action(action: String) -> void:
+func _on_refining_pressed() -> void:
+	var player: PlayerData = _get_my_player()
+	if player != null:
+		var status: Dictionary = GameManager.get_refining_status(player)
+		if not bool(status.get("can", false)):
+			label_log.text = "日志：" + str(status.get("reason", "暂时不能炼器"))
+			_update_refining_button(player)
+			return
+	_start_crafting_minigame("refining")
+
+
+func _send_market_action(action: String, extra_data: Dictionary = {}) -> void:
 	var data: Dictionary = {"action": action}
+	for key in extra_data:
+		data[key] = extra_data[key]
 	if NetworkManager.is_host:
 		GameManager.on_market_action_received(1, data)
 	else:
 		NetworkManager.send_message("market_action", data)
+
+
+func _start_crafting_minigame(mode: String) -> void:
+	var player: PlayerData = _get_my_player()
+	if player == null or crafting_layer == null:
+		return
+	var status: Dictionary = GameManager.get_alchemy_status(player) if mode == "alchemy" else GameManager.get_refining_status(player)
+	if not bool(status.get("can", false)):
+		label_log.text = "日志：" + str(status.get("reason", "暂时不能开炉"))
+		return
+	crafting_mode = mode
+	crafting_pointer_value = randf()
+	crafting_pointer_dir = 1.0 if randf() >= 0.5 else -1.0
+	var stat_score: int = int(status.get("stat_score", 0))
+	_update_crafting_windows(stat_score)
+	crafting_speed = maxf(0.52, 0.90 - float(stat_score) * 0.018) + randf() * 0.18
+	crafting_running = true
+	crafting_layer.visible = true
+	crafting_layer.move_to_front()
+	if crafting_title_label != null:
+		crafting_title_label.text = "开炉炼丹" if mode == "alchemy" else "开炉炼器"
+	if crafting_status_label != null:
+		var material_name: String = str(status.get("material_name", "灵草" if mode == "alchemy" else "矿材"))
+		crafting_status_label.text = "投入" + material_name + "。相关六维：" + str(status.get("stat_text", "")) + "=" + str(stat_score) + "，看准火候点「收火」，点空白处停手。"
+	if crafting_action_button != null:
+		crafting_action_button.text = "收火"
+		crafting_action_button.disabled = false
+	if crafting_art_label != null:
+		crafting_art_label.text = "丹炉" if mode == "alchemy" else "锻炉"
+		crafting_art_label.add_theme_color_override("font_color", Color("#f0c040"))
+	if crafting_art_panel != null:
+		crafting_art_panel.add_theme_stylebox_override("panel", _make_crafting_art_style(Color("#2a1b10") if mode == "alchemy" else Color("#101c26"), Color("#f0c040")))
+		crafting_art_panel.scale = Vector2.ONE
+	if crafting_feedback_panel != null:
+		crafting_feedback_panel.visible = false
+	_update_crafting_pointer_visual()
+
+
+func _update_crafting_windows(stat_score: int) -> void:
+	var good_half: float = clampf(0.16 + float(stat_score) * 0.006, 0.16, 0.29)
+	var perfect_half: float = clampf(0.04 + float(stat_score) * 0.0025, 0.04, 0.095)
+	crafting_good_left = 0.5 - good_half
+	crafting_good_right = 0.5 + good_half
+	crafting_perfect_left = 0.5 - perfect_half
+	crafting_perfect_right = 0.5 + perfect_half
+	if crafting_good_zone != null:
+		crafting_good_zone.anchor_left = crafting_good_left
+		crafting_good_zone.anchor_right = crafting_good_right
+	if crafting_perfect_zone != null:
+		crafting_perfect_zone.anchor_left = crafting_perfect_left
+		crafting_perfect_zone.anchor_right = crafting_perfect_right
+
+
+func _update_crafting_minigame(delta: float) -> void:
+	crafting_pointer_value += crafting_pointer_dir * crafting_speed * delta
+	if crafting_pointer_value >= 1.0:
+		crafting_pointer_value = 1.0
+		crafting_pointer_dir = -1.0
+	elif crafting_pointer_value <= 0.0:
+		crafting_pointer_value = 0.0
+		crafting_pointer_dir = 1.0
+	_update_crafting_pointer_visual()
+
+
+func _update_crafting_pointer_visual() -> void:
+	if crafting_pointer == null or crafting_bar == null:
+		return
+	var width: float = maxf(1.0, crafting_bar.size.x)
+	crafting_pointer.offset_left = crafting_pointer_value * width - 3.0
+	crafting_pointer.offset_right = crafting_pointer.offset_left + 6.0
+
+
+func _on_crafting_overlay_dim_gui_input(event: InputEvent) -> void:
+	if crafting_layer == null or not crafting_layer.visible or not crafting_running:
+		return
+	var should_stop: bool = false
+	if event is InputEventMouseButton:
+		var mouse_event: InputEventMouseButton = event as InputEventMouseButton
+		should_stop = mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT
+	elif event is InputEventScreenTouch:
+		should_stop = (event as InputEventScreenTouch).pressed
+	if not should_stop:
+		return
+	_hide_crafting_overlay()
+	if label_log != null:
+		label_log.text = "日志：暂且停火，材料尚未投入。"
+	get_viewport().set_input_as_handled()
+
+
+func _on_crafting_action_pressed() -> void:
+	if not crafting_running:
+		return
+	var grade: String = _crafting_grade_from_pointer()
+	var action: String = "alchemy" if crafting_mode == "alchemy" else "refining"
+	var player: PlayerData = _get_my_player()
+	var status: Dictionary = GameManager.get_alchemy_status(player) if action == "alchemy" else GameManager.get_refining_status(player)
+	var material_name: String = str(status.get("material_name", "灵草" if action == "alchemy" else "矿材"))
+	crafting_running = false
+	if crafting_action_button != null:
+		crafting_action_button.disabled = true
+	label_log.text = "日志：" + ("炉火正妙" if grade == "perfect" else ("火候已成" if grade == "good" else "炉火失衡"))
+	await _play_crafting_grade_feedback(grade, action)
+	_hide_crafting_overlay()
+	_send_market_action(action, {"grade": grade, "material_name": material_name})
+
+
+func _play_crafting_grade_feedback(grade: String, action: String) -> void:
+	var grade_color: Color = _crafting_grade_color(grade)
+	if crafting_feedback_panel != null:
+		crafting_feedback_panel.visible = true
+		crafting_feedback_panel.modulate.a = 0.0
+		crafting_feedback_panel.scale = Vector2(0.92, 0.92)
+		crafting_feedback_panel.add_theme_stylebox_override("panel", _make_crafting_art_style(Color("#261604"), grade_color))
+	if crafting_feedback_label != null:
+		crafting_feedback_label.text = _crafting_grade_display(grade)
+		crafting_feedback_label.add_theme_color_override("font_color", grade_color)
+	if crafting_feedback_detail_label != null:
+		crafting_feedback_detail_label.text = _crafting_grade_detail(grade, action)
+	if crafting_art_label != null:
+		crafting_art_label.text = _crafting_art_result_text(grade, action)
+		crafting_art_label.add_theme_color_override("font_color", grade_color)
+	if crafting_art_panel != null:
+		crafting_art_panel.add_theme_stylebox_override("panel", _make_crafting_art_style(_crafting_art_fill_color(grade, action), grade_color))
+		crafting_art_panel.pivot_offset = crafting_art_panel.size * 0.5
+		var art_tween := create_tween()
+		art_tween.set_trans(Tween.TRANS_BACK)
+		art_tween.set_ease(Tween.EASE_OUT)
+		art_tween.tween_property(crafting_art_panel, "scale", Vector2(1.08, 1.08), 0.12)
+		art_tween.tween_property(crafting_art_panel, "scale", Vector2.ONE, 0.18)
+	if crafting_feedback_panel != null:
+		var feedback_tween := create_tween()
+		feedback_tween.set_parallel(true)
+		feedback_tween.set_trans(Tween.TRANS_BACK)
+		feedback_tween.set_ease(Tween.EASE_OUT)
+		feedback_tween.tween_property(crafting_feedback_panel, "modulate:a", 1.0, 0.12)
+		feedback_tween.tween_property(crafting_feedback_panel, "scale", Vector2.ONE, 0.16)
+	UIEffects.screen_shake(self, 4.5 if grade == "perfect" else (2.2 if grade == "good" else 6.0), 0.18)
+	await get_tree().create_timer(0.72).timeout
+
+
+func _crafting_grade_color(grade: String) -> Color:
+	match grade:
+		"perfect":
+			return Color("#f0c040")
+		"miss":
+			return Color("#c04040")
+		_:
+			return Color("#80c0ff")
+
+
+func _crafting_grade_detail(grade: String, action: String) -> String:
+	var target_name: String = "丹成" if action == "alchemy" else "器鸣"
+	match grade:
+		"perfect":
+			return "收火极准，" + target_name + "上品。"
+		"miss":
+			return "火势偏乱，只留残火收益。"
+		_:
+			return "收火稳当，" + target_name + "可用。"
+
+
+func _crafting_art_result_text(grade: String, action: String) -> String:
+	if action == "alchemy":
+		match grade:
+			"perfect":
+				return "丹光大盛"
+			"miss":
+				return "炉烟散乱"
+			_:
+				return "丹气成形"
+	match grade:
+		"perfect":
+			return "器纹鸣响"
+		"miss":
+			return "火星四散"
+		_:
+			return "淬火成器"
+
+
+func _crafting_art_fill_color(grade: String, action: String) -> Color:
+	if grade == "miss":
+		return Color("#2a0909")
+	if action == "refining":
+		return Color("#102432") if grade == "good" else Color("#30240a")
+	return Color("#2a1b10") if grade == "good" else Color("#332106")
+
+
+func _crafting_grade_from_pointer() -> String:
+	if crafting_pointer_value >= crafting_perfect_left and crafting_pointer_value <= crafting_perfect_right:
+		return "perfect"
+	if crafting_pointer_value >= crafting_good_left and crafting_pointer_value <= crafting_good_right:
+		return "good"
+	return "miss"
+
+
+func _hide_crafting_overlay() -> void:
+	crafting_running = false
+	if crafting_layer != null:
+		crafting_layer.visible = false
+	if crafting_feedback_panel != null:
+		crafting_feedback_panel.visible = false
+	if crafting_art_panel != null:
+		crafting_art_panel.scale = Vector2.ONE
 
 
 func _on_market_changed(data: Dictionary) -> void:
@@ -4291,13 +5046,60 @@ func _on_market_changed(data: Dictionary) -> void:
 	var my_player: PlayerData = _get_my_player()
 	if my_player != null and peer_id == my_player.peer_id:
 		label_log.text = "日志：" + str(data.get("message", "坊市交易完成"))
-	if btn_continue_result != null and result_toast != null and result_toast.visible:
+		var action: String = str(data.get("action", ""))
+		if action == "alchemy" or action == "refining":
+			_show_crafting_result(data)
+	if btn_continue_result != null and result_toast != null and result_toast.visible and not bool(result_toast.get_meta("local_only", false)):
 		if my_player != null and GameManager.has_pending_backpack_item(my_player.peer_id):
 			btn_continue_result.text = "先清理背包"
 		elif result_continue_sent:
 			btn_continue_result.text = "等待对方确认..."
 		else:
 			btn_continue_result.text = "继续"
+
+
+func _show_crafting_result(data: Dictionary) -> void:
+	if result_toast == null:
+		return
+	var action: String = str(data.get("action", "alchemy"))
+	var title: String = "炼丹完成" if action == "alchemy" else "炼器完成"
+	var material_name: String = str(data.get("material_name", "灵草" if action == "alchemy" else "矿材"))
+	var grade_text: String = _crafting_grade_display(str(data.get("grade", "good")))
+	var message: String = str(data.get("message", "开炉完成"))
+	_apply_panel_style(result_toast, Color(0.18, 0.13, 0.03, 0.97))
+	label_result_title.text = title
+	label_result_title.add_theme_color_override("font_color", Color("#f0c040"))
+	label_result_detail.text = "投入：" + material_name + "\n火候：" + grade_text + "\n收获：" + message
+	if contest_button_row != null:
+		contest_button_row.visible = false
+	if btn_continue_result != null:
+		btn_continue_result.text = "继续"
+		btn_continue_result.visible = true
+		btn_continue_result.disabled = false
+	result_toast.visible = true
+	result_toast.z_index = 240
+	result_toast.mouse_filter = Control.MOUSE_FILTER_STOP
+	result_toast.set_meta("local_only", true)
+	result_toast.set_meta("local_log_message", title + "已收起")
+	result_toast.move_to_front()
+	result_toast.modulate.a = 1.0
+	result_toast.scale = Vector2(0.98, 0.98)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_BACK)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(result_toast, "modulate:a", 1.0, 0.16)
+	tween.tween_property(result_toast, "scale", Vector2.ONE, 0.2)
+
+
+func _crafting_grade_display(grade: String) -> String:
+	match grade:
+		"perfect":
+			return "炉火正妙"
+		"miss":
+			return "炉火失衡"
+		_:
+			return "火候已成"
 
 
 func _next_market_dan_name(player: PlayerData) -> String:
@@ -4317,7 +5119,7 @@ func _on_backpack_changed(data: Dictionary) -> void:
 	if GameManager.current_state == GameManager.GameState.REST:
 		_refresh_rest_panel({"message": str(data.get("message", "整备已更新")), "final_duel": GameManager.final_duel_after_rest})
 		return
-	if btn_continue_result != null and result_toast != null and result_toast.visible:
+	if btn_continue_result != null and result_toast != null and result_toast.visible and not bool(result_toast.get_meta("local_only", false)):
 		if my_player != null and GameManager.has_pending_backpack_item(my_player.peer_id):
 			btn_continue_result.text = "先清理背包"
 			btn_continue_result.disabled = false
@@ -4414,22 +5216,13 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 	var data: Dictionary = entry.get("data", {}) as Dictionary
 	var lines: Array[String] = []
 	lines.append(_item_kind_name(kind) + "：" + str(data.get("name", "未知")))
-	if data.has("quality") and kind in ["technique", "treasure", "companion"]:
-		lines.append("境界：" + _quality_display_name(str(data.get("quality", ""))))
+	if data.has("quality") and kind in ["technique", "treasure", "companion", "material"]:
+		lines.append("品质：" + _quality_display_name(str(data.get("quality", ""))))
 	if kind in ["technique", "treasure", "companion"]:
 		if kind in ["technique", "treasure"]:
-			var affix_count: int = (data.get("affixes", []) as Array).size()
-			var max_affix_count: int = GameManager.get_quality_affix_count(str(data.get("quality", "炼气级")))
-			var primary_tag: String = str(data.get("primary_cultivation_tag", ""))
-			var primary_text: String = "｜主修：" + primary_tag if primary_tag != "" else ""
-			lines.append("词条数量：" + str(affix_count) + "/" + str(max_affix_count) + primary_text)
-		var affix_text: String = _affix_names(data)
-		if affix_text != "":
-			lines.append("词条：" + affix_text)
-			var affix_detail: String = _affix_detail_text(data)
-			if affix_detail != "":
-				lines.append("词条说明：")
-				lines.append(affix_detail)
+			var affix_line: String = _inventory_affix_line(data)
+			if affix_line != "":
+				lines.append(affix_line)
 	if data.has("title"):
 		lines.append("身份：" + str(data.get("title", "")))
 
@@ -4441,45 +5234,123 @@ func _describe_inventory_entry(entry: Dictionary, source: String, index: int) ->
 			var progress: int = int(data.get("realm_progress", 0))
 			var req: int = int(GameManager.TECHNIQUE_REALM_FRAGMENT_REQ.get(realm, 0))
 			var progress_text: String = "｜参悟 " + str(progress) + "/" + str(req) if req > 0 else "｜已大成"
-			lines.append("功法境界：" + realm + progress_text)
-			if not base_bonuses.is_empty():
-				lines.append("基础加成：" + _format_bonus_dict(base_bonuses))
-			lines.append("属性加成：" + _format_bonus_dict(bonuses))
-			lines.append("品质倍率：" + str(float(data.get("quality_multiplier", 1.0))) + "｜境界倍率：" + str(float(data.get("realm_bonus", 0.5))) + "｜词条上限：" + str(GameManager.get_quality_affix_count(str(data.get("quality", "炼气级")))))
-			lines.append("提示：同名残卷是最快参悟；抢缘、让缘、承厄、周旋、炼丹、炼器等行为也会提升对应修词条。")
+			lines.append("定位：上场后提供1-2项专精属性")
+			lines.append("修炼：" + realm + progress_text)
+			lines.append("效果：" + _format_bonus_dict(bonuses if not bonuses.is_empty() else base_bonuses))
+			lines.append("升级：" + _format_technique_growth_hint(str(data.get("primary_cultivation_tag", ""))))
 		"treasure":
+			lines.append("定位：抢攻自动出手")
+			lines.append("攻击：+" + str(int(data.get("battle_damage", data.get("base_attack", 0)))) + "｜特效：" + _format_treasure_attack_effect(str(data.get("attack_effect", "未知"))))
 			if data.has("growth_value"):
 				lines.append("成长：" + str(data.get("growth_name", "成长")) + " " + str(int(data.get("growth_value", 0))) + " / " + str(int(data.get("awaken_threshold", data.get("growth_max", 0)))) + "｜" + ("已觉醒" if int(data.get("awakening_level", 0)) > 0 else "未觉醒"))
-			lines.append("基础攻击：+" + str(int(data.get("base_attack", data.get("battle_damage", 0)))) + "｜当前攻击：+" + str(int(data.get("battle_damage", 0))))
-			lines.append("攻击特效：" + str(data.get("attack_effect", "未知")) + "，" + str(data.get("attack_effect_desc", "抢攻时概率触发")))
 			var awaken_skill: Dictionary = data.get("awakening_skill", {}) as Dictionary
 			if not awaken_skill.is_empty():
-				lines.append("觉醒技：" + str(awaken_skill.get("name", "觉醒技")) + "：" + str(awaken_skill.get("desc", "抢攻时自动触发")))
+				lines.append("觉醒：" + _format_treasure_awaken_skill(awaken_skill))
 			var extra_effects: Array = data.get("extra_attack_effects", []) as Array
 			if not extra_effects.is_empty():
 				var extra_names: Array[String] = []
 				for effect in extra_effects:
 					extra_names.append(str(effect))
-				lines.append("觉醒附加：" + "，".join(extra_names))
-			lines.append("提示：上场后在抢攻时自动使用；可随时从背包切换上场法宝。")
+				lines.append("附加：" + "，".join(extra_names))
+			var treasure_primary_tag: String = str(data.get("primary_cultivation_tag", ""))
+			var treasure_growth: Dictionary = GameManager.TREASURE_GROWTH.get(treasure_primary_tag, {}) as Dictionary
+			lines.append("升级：" + str(treasure_growth.get("trigger", _format_growth_behavior_hint(treasure_primary_tag))))
 		"companion":
 			var bond_value: int = int(data.get("bond", 0))
 			var bond_max: int = GameManager.get_companion_bond_max(data)
+			lines.append("定位：被动加成 + 宗门身份")
 			lines.append("门派：" + GameManager.get_companion_sect(data) + "｜阵营：" + GameManager.get_companion_alignment(data))
 			lines.append("被动：" + str(data.get("effect_desc", str(data.get("bonus_type", "")) + " " + str(data.get("bonus_value", "")))))
 			lines.append("羁绊：" + GameManager.get_companion_bond_stage_text_for_data(data) + " " + str(bond_value) + "/" + str(bond_max))
 			lines.append("满羁绊：" + str(data.get("full_effect_desc", "解锁专属被动")))
-			lines.append("提示：伙伴不上战场；正道喜让与扛，邪道喜抢与杀。可随时从背包切换上场伙伴。")
+		"material":
+			var material_type: String = str(data.get("material_type", "alchemy"))
+			if material_type == "craft":
+				lines.append("用途：炼器消耗，淬炼上场法宝")
+				lines.append("相关六维：体魄 + 经商")
+				lines.append("玩法：点炼器开炉，蓝区成功，金区完美")
+				lines.append("成色：操作越准、相关六维越高，品质越好")
+				lines.append("成长：高品质会提高法宝成长与器修功法收益")
+			else:
+				lines.append("用途：炼丹消耗，炼突破丹或回春丹")
+				lines.append("相关六维：气感 + 机缘")
+				lines.append("玩法：点炼丹开炉，蓝区成功，金区完美")
+				lines.append("成色：操作越准、相关六维越高，品质越好")
+				lines.append("成长：高品质会提高药力与丹修成长")
 		_:
 			lines.append("暂未记录详细效果。")
 
 	if source != "":
 		lines.append("")
 		lines.append("位置：" + _inventory_source_name(source, index))
-	var my_player: PlayerData = _get_my_player()
-	if my_player != null and kind in ["technique", "treasure", "companion"]:
-		lines.append("当前：" + _format_build_progress(my_player))
 	return "\n".join(lines)
+
+
+func _inventory_affix_line(data: Dictionary) -> String:
+	var affix_count: int = (data.get("affixes", []) as Array).size()
+	var max_affix_count: int = GameManager.get_quality_affix_count(str(data.get("quality", "炼气级")))
+	var affix_text: String = _affix_names(data)
+	var primary_tag: String = str(data.get("primary_cultivation_tag", ""))
+	var primary_text: String = "｜主修：" + primary_tag if primary_tag != "" else ""
+	if affix_text == "":
+		return "词条：" + str(affix_count) + "/" + str(max_affix_count) + primary_text
+	return "词条：" + affix_text + "｜" + str(affix_count) + "/" + str(max_affix_count) + primary_text
+
+
+func _format_technique_growth_hint(cultivation_tag: String) -> String:
+	var behavior_text: String = _format_growth_behavior_hint(cultivation_tag)
+	if behavior_text == "":
+		return "同名残卷"
+	return "同名残卷；" + behavior_text
+
+
+func _format_growth_behavior_hint(cultivation_tag: String) -> String:
+	match cultivation_tag:
+		"鬼修":
+			return "抢机缘、击杀敌人"
+		"体修":
+			return "承受伤害、承担灾厄、扛天劫"
+		"剑修":
+			return "抢攻、突破境界"
+		"情修":
+			return "让机缘、共担灾厄、护道承劫"
+		"丹修":
+			return "回血、炼丹、服丹"
+		"阵修":
+			return "周旋布阵、承担灾厄、扛天劫"
+		"符修":
+			return "周旋、闪避、避灾避劫"
+		"器修":
+			return "法宝成长、法宝觉醒、炼器"
+		_:
+			return ""
+
+
+func _format_treasure_attack_effect(effect_name: String) -> String:
+	match effect_name:
+		"破甲":
+			return "破甲（无视20%防御）"
+		"吸血":
+			return "吸血（伤害15%回血）"
+		"连击":
+			return "连击（追加50%伤害）"
+		"暴击加成":
+			return "暴击加成（本次暴击+20%）"
+		_:
+			return effect_name
+
+
+func _format_treasure_awaken_skill(skill: Dictionary) -> String:
+	var parts: Array[String] = [str(skill.get("name", "觉醒技"))]
+	var damage_scale: float = float(skill.get("damage_scale", 0.0))
+	if damage_scale > 0.0:
+		parts.append("追加" + str(int(round(damage_scale * 100.0))) + "%伤害")
+	var heal_rate: float = float(skill.get("heal_rate", 0.0))
+	if heal_rate > 0.0:
+		parts.append("吸血" + str(int(round(heal_rate * 100.0))) + "%")
+	if parts.size() <= 1 and str(skill.get("desc", "")) != "":
+		parts.append(str(skill.get("desc", "")))
+	return "，".join(parts)
 
 
 func _affix_detail_text(data: Dictionary) -> String:

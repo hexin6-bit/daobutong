@@ -147,6 +147,8 @@ func _receive_message(msg: String) -> void:
 			GameManager.on_battle_end(data)
 		elif msg_type == "duel_action":
 			GameManager.settle_duel_action()
+		elif msg_type == "duel_continue":
+			GameManager.on_duel_continue_received(multiplayer.get_remote_sender_id(), data)
 		elif msg_type == "duel_data":
 			GameManager.on_duel_data(data)
 		elif msg_type == "duel_update":
@@ -157,6 +159,16 @@ func _receive_message(msg: String) -> void:
 			GameManager.on_duel_final_choice_received(multiplayer.get_remote_sender_id(), data)
 		elif msg_type == "duel_final_choice_result":
 			GameManager.on_duel_final_choice_result(data)
+		elif msg_type == "sect_event_started":
+			GameManager.on_sect_event_started(data)
+		elif msg_type == "sect_event_choice":
+			GameManager.on_sect_event_choice_received(multiplayer.get_remote_sender_id(), data)
+		elif msg_type == "sect_event_updated":
+			GameManager.on_sect_event_updated(data)
+		elif msg_type == "sect_event_continue":
+			GameManager.on_sect_event_continue_received(multiplayer.get_remote_sender_id(), data)
+		elif msg_type == "sect_event_finished":
+			GameManager.on_sect_event_finished(data)
 		elif msg_type == "set_bonus_triggered":
 			GameManager.on_set_bonus_triggered(data)
 		message_received.emit(msg_type, data)

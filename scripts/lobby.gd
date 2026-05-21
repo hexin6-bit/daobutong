@@ -8,7 +8,8 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	UIEffects.apply_button_press_tween(self)
-	NetworkManager.player_connected.connect(_on_player_connected)
+	if not NetworkManager.player_connected.is_connected(_on_player_connected):
+		NetworkManager.player_connected.connect(_on_player_connected)
 
 	if NetworkManager.connected and not NetworkManager.is_host:
 		call_deferred("_on_player_connected", 1)

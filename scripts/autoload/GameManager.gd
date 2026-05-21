@@ -1,6 +1,6 @@
 extends Node
 
-enum GameState {STAT_ALLOCATION, ROUND_START, LOTTERY, BARGAIN, REST, CONTEST, AUCTION, BATTLE, BREAKTHROUGH, TRIBULATION, DUEL, ENDING}
+enum GameState {STAT_ALLOCATION, ROUND_START, LOTTERY, BARGAIN, REST, CONTEST, AUCTION, BATTLE, BREAKTHROUGH, TRIBULATION, DUEL, ENDING, SECT_EVENT}
 
 signal game_state_changed(new_state: int)
 signal lottery_generated(results: Array)
@@ -26,6 +26,9 @@ signal duel_triggered()
 signal duel_prepared(data: Dictionary)
 signal duel_updated(data: Dictionary)
 signal duel_finished(data: Dictionary)
+signal sect_event_started(data: Dictionary)
+signal sect_event_updated(data: Dictionary)
+signal sect_event_finished(data: Dictionary)
 signal npc_dialogue_changed(line: String)
 signal set_bonus_triggered(data: Dictionary)
 
@@ -79,26 +82,32 @@ const JI_YUAN_TYPES := [
 	{"name": "治疗", "base_effect": 30, "effect_type": "heal_percent"},
 	{"name": "灵泉沐浴", "base_effect": 40, "effect_type": "heal_percent"},
 	{"name": "灵石", "base_effect": 350, "effect_type": "ling_shi"},
+	{"name": "坊市", "base_effect": 400, "effect_type": "auction"},
 	{"name": "功法", "base_effect": 0, "effect_type": "technique"},
 	{"name": "法宝", "base_effect": 0, "effect_type": "treasure"},
-	{"name": "丹药", "base_effect": 0, "effect_type": "dan"},
+	{"name": "灵草", "base_effect": 0, "effect_type": "alchemy_material"},
+	{"name": "灵草丛", "base_effect": 0, "effect_type": "alchemy_material"},
+	{"name": "灵药圃", "base_effect": 0, "effect_type": "alchemy_material"},
+	{"name": "矿材", "base_effect": 0, "effect_type": "craft_material"},
+	{"name": "矿脉", "base_effect": 0, "effect_type": "craft_material"},
+	{"name": "陨铁矿", "base_effect": 0, "effect_type": "craft_material"},
 	{"name": "属性", "base_effect": 1, "effect_type": "stat_up"},
 	{"name": "偶得延寿丹", "base_effect": 2, "effect_type": "shou_yuan"},
 	{"name": "伙伴", "base_effect": 0, "effect_type": "companion"},
-	{"name": "拍卖会", "base_effect": 400, "effect_type": "auction"},
 	{"name": "悬赏令", "base_effect": 0, "effect_type": "quest"},
 	{"name": "秘境探索", "base_effect": 1, "effect_type": "adventure"},
 ]
 
 const JI_YUAN_TYPE_WEIGHTS := {
 	"ling_li": 2.2,
-	"dan": 1.0,
+	"auction": 0.75,
+	"alchemy_material": 1.05,
+	"craft_material": 0.95,
 	"stat_up": 1.2,
 	"shou_yuan": 1.4,
 	"technique": 1.45,
 	"treasure": 1.05,
 	"companion": 0.95,
-	"auction": 0.75,
 	"quest": 1.2,
 	"adventure": 0.95,
 	"heal_percent": 1.1,
@@ -111,7 +120,7 @@ const MIN_BUILD_CARDS_PER_ROUND := 1
 const MIN_ENEMY_CARDS_PER_ROUND := 1
 const MIN_AUCTION_CARDS_PER_ROUND := 1
 const AUCTION_STONE_BASE := 400
-const BUILD_EFFECT_TYPES := ["technique", "treasure", "companion", "dan", "adventure"]
+const BUILD_EFFECT_TYPES := ["technique", "treasure", "companion", "alchemy_material", "craft_material", "adventure"]
 const QUEST_EFFECT_TYPES := ["quest"]
 const BASE_SHOU_YUAN := 10
 const SHOU_YUAN_PER_TI_PO := 2
@@ -121,7 +130,17 @@ const MARKET_HEAL_COST := 200
 const MARKET_HEAL_PCT := 0.30
 const MARKET_BACKPACK_COST := 500
 const MARKET_DAN_COSTS := {"筑基丹": 450, "金丹": 1200, "元婴丹": 2400}
-const DUEL_LING_LI_REQ := 900
+const ALCHEMY_COMMON_COST := 180
+const ALCHEMY_DAN_COST_RATE := 0.70
+const ALCHEMY_HEAL_PCT := 0.18
+const ALCHEMY_LING_LI_GAIN := 20
+const ALCHEMY_RELATED_STATS := ["气感", "机缘"]
+const REFINING_RELATED_STATS := ["体魄", "经商"]
+const DUEL_LING_LI_REQ := 3200
+const SECT_EVENT_ROUND_INTERVAL := 3
+const SECT_EVENT_CHOICE_SECONDS := 10.0
+const SPARRING_MAX_ACTIONS := 3
+const SPARRING_LOW_HP_RATE := 0.35
 const MINOR_STAGE_NAMES := ["一层", "二层", "三层", "四层", "五层", "六层", "七层", "八层", "九层"]
 const MINOR_BREAKTHROUGH_BASE_CHANCE := 0.70
 const MAJOR_BREAKTHROUGH_BASE_CHANCE := 0.56
@@ -131,17 +150,31 @@ const MINOR_BREAKTHROUGH_FAIL_LOSS_RATE := 0.35
 const MAJOR_BREAKTHROUGH_FAIL_LOSS_RATE := 0.45
 const MINOR_BREAKTHROUGH_FAIL_DAMAGE := 0.05
 const MAJOR_BREAKTHROUGH_FAIL_DAMAGE := 0.12
-const ESCAPE_BASE_CHANCE := 0.55
-const ESCAPE_SHEN_FA_CHANCE := 0.055
-const ESCAPE_SPEED_CHANCE := 0.002
-const ESCAPE_ELITE_PENALTY := 0.15
+const ESCAPE_BASE_CHANCE := 0.62
+const ESCAPE_SHEN_FA_CHANCE := 0.065
+const ESCAPE_SPEED_CHANCE := 0.0025
+const ESCAPE_ELITE_PENALTY := 0.12
 const ESCAPE_FAIL_HURT_MULTIPLIER := 1.25
 const BATTLE_ATTACK_DAMAGE_SCALE := 0.16
 const BATTLE_DEFENSE_REDUCTION_SCALE := 55.0
 const BATTLE_DEFENSE_REDUCTION_CAP := 0.35
-const MULTI_ENEMY_MIN_REALM_RANK := 2
+const ENEMY_SINGLE_ATTACK_CHANCE := 0.55
+const ENEMY_SINGLE_ATTACK_MULTIPLIER := 1.35
+const ENEMY_GROUP_ATTACK_MULTIPLIER := 0.82
+const ENEMY_GROUP_ATTACK_PACK_BONUS := 0.16
+const ENEMY_GROUP_ATTACK_ELITE_BONUS := 0.08
+const ENEMY_GROUP_ATTACK_THREAT_BONUS := 0.04
+const ENEMY_MIN_SURVIVE_ACTIONS := 2.4
+const ENEMY_ELITE_SURVIVE_ACTIONS := 3.2
+const ENEMY_ATTACK_HP_PRESSURE := 0.11
+const ENEMY_BUILD_PRESSURE_DAMAGE_LOSS := 0.16
+const ENEMY_BUILD_PRESSURE_HURT_GAIN := 0.18
+const ENEMY_THREAT_DAMAGE_LOSS := 0.08
+const ENEMY_THREAT_HURT_GAIN := 0.12
+const ENEMY_THREAT_MAX_LEVEL := 4
+const MULTI_ENEMY_MIN_REALM_RANK := 1
 const MULTI_ENEMY_BASE_CHANCE := 0.18
-const MULTI_ENEMY_REALM_CHANCE := 0.08
+const MULTI_ENEMY_REALM_CHANCE := 0.10
 const MULTI_ENEMY_REWARD_SCALE := 0.55
 const BASE_CRIT_CHANCE := 0.05
 const CRIT_DAMAGE_MULTIPLIER := 1.5
@@ -152,14 +185,16 @@ const COMPANION_BOND_NEGATIVE_MULTIPLIER := 0.5
 const TECHNIQUE_BEHAVIOR_GROWTH_MAX_MESSAGES := 2
 const SAVE_PATH := "user://dao_save.json"
 const IMMORTAL_RECORD_PATH := "user://immortal_records.json"
+const AUTO_SAVE_ENABLED := true
 const MAX_EQUIPPED_TECHNIQUES := 4
 const MAX_EQUIPPED_TREASURES := 1
 const MAX_CULTIVATION_SET_COUNT := 5
 const MAX_COMPANIONS := 3
 const MAX_BACKPACK_TECHNIQUES := 8
-const MAX_BACKPACK_CAPACITY := 18
 const MAX_BACKPACK_TREASURES := 4
 const MAX_BACKPACK_COMPANIONS := 6
+const MAX_BACKPACK_MATERIALS := 8
+const MAX_BACKPACK_CAPACITY := MAX_BACKPACK_TECHNIQUES + MAX_BACKPACK_TREASURES + MAX_BACKPACK_COMPANIONS + MAX_BACKPACK_MATERIALS
 const SCATTERED_POOL_REAPPEAR_RATE := 0.5
 const MAX_SCATTERED_POOL_SIZE := 60
 const COMPANION_BOND_STAGE_REQS := [0, 3, 6, 10]
@@ -303,11 +338,28 @@ const TREASURE_AWAKEN_SKILLS := {
 
 const TECHNIQUE_REALM_FRAGMENT_REQ := {"初窥": 3, "小成": 6}
 const TECHNIQUE_DUPLICATE_FRAGMENT_PROGRESS := 3
+const TECHNIQUE_MAX_BASE_BONUS_KEYS := 2
+const TECHNIQUE_MAX_AFFIX_BONUS_KEYS := 1
+const TECHNIQUE_MAX_TOTAL_BONUS_KEYS := 2
+const TECHNIQUE_AFFIX_BONUS_SCALE := 0.65
+const TECHNIQUE_SPLIT_BONUS_CONVERSION := 0.35
+const TECHNIQUE_ALL_ATTRIBUTE_CONVERSION := 2.4
 
 const TECHNIQUE_BONUS_KEYS := [
 	"攻击力", "防御力", "气血上限", "灵力获取", "全属性",
 	"吸血", "破防", "反伤", "暴击率", "闪避率", "战斗减伤", "每轮回血", "速度",
 ]
+
+const CULTIVATION_PRIMARY_BONUS_KEYS := {
+	"鬼修": "吸血",
+	"体修": "气血上限",
+	"剑修": "攻击力",
+	"情修": "灵力获取",
+	"丹修": "每轮回血",
+	"阵修": "战斗减伤",
+	"符修": "闪避率",
+	"器修": "暴击率",
+}
 
 const ITEM_AFFIX_POOL := [
 	{"name": "淬体", "tag": "体修", "desc": "堆气血上限，体修成型的血肉根基。", "targets": ["technique", "treasure", "companion"], "bonuses": {"气血上限": 0.05}},
@@ -339,8 +391,8 @@ const BASE_STATS := ["体魄", "气感", "经商", "身法", "魅力", "机缘"]
 const REALMS := {
 	"炼气期": {"ling_li_req": 0, "attack_bonus": 0.0, "defense_bonus": 0.0, "hp_bonus": 0.0, "speed_base": 10, "dan": ""},
 	"筑基期": {"ling_li_req": 180, "attack_bonus": 0.20, "defense_bonus": 0.20, "hp_bonus": 0.20, "speed_base": 20, "dan": "筑基丹"},
-	"金丹期": {"ling_li_req": 520, "attack_bonus": 0.50, "defense_bonus": 0.40, "hp_bonus": 0.40, "speed_base": 30, "dan": "金丹"},
-	"元婴期": {"ling_li_req": 980, "attack_bonus": 1.00, "defense_bonus": 0.80, "hp_bonus": 0.80, "speed_base": 40, "dan": "元婴丹"},
+	"金丹期": {"ling_li_req": 760, "attack_bonus": 0.50, "defense_bonus": 0.40, "hp_bonus": 0.40, "speed_base": 30, "dan": "金丹"},
+	"元婴期": {"ling_li_req": 1800, "attack_bonus": 1.00, "defense_bonus": 0.80, "hp_bonus": 0.80, "speed_base": 40, "dan": "元婴丹"},
 }
 
 const TRIBULATIONS := {
@@ -350,12 +402,12 @@ const TRIBULATIONS := {
 }
 
 const ENEMIES := {
-	"炼气级": {"hp": 40, "attack": 5, "drop_desc": "少量灵石/灵力"},
-	"筑基级": {"hp": 58, "attack": 8, "drop_desc": "灵石/灵力"},
-	"金丹级": {"hp": 86, "attack": 11, "drop_desc": "灵石/灵力"},
-	"元婴级": {"hp": 128, "attack": 15, "drop_desc": "随机功法(金丹级)"},
-	"化神级": {"hp": 188, "attack": 20, "drop_desc": "随机功法(元婴级)+灵石"},
-	"合体级": {"hp": 270, "attack": 28, "drop_desc": "随机功法(化神级)+寿元"},
+	"炼气级": {"hp": 52, "attack": 6, "drop_desc": "灵石/灵力/材料"},
+	"筑基级": {"hp": 78, "attack": 10, "drop_desc": "灵石/灵力/材料"},
+	"金丹级": {"hp": 124, "attack": 15, "drop_desc": "灵石/灵力/材料"},
+	"元婴级": {"hp": 190, "attack": 21, "drop_desc": "功法/法宝/材料"},
+	"化神级": {"hp": 290, "attack": 29, "drop_desc": "功法/法宝/材料"},
+	"合体级": {"hp": 430, "attack": 40, "drop_desc": "功法/法宝/材料"},
 }
 
 const BOUNTY_TASK_POOL := [
@@ -707,8 +759,13 @@ var pending_tribulation_data: Dictionary = {}
 var tribulation_choices: Dictionary = {}
 var duel_data: Dictionary = {}
 var duel_round_number: int = 0
+var duel_mode: String = "final"
+var duel_continue_votes: Dictionary = {}
 var pending_duel_winner_key: String = ""
 var pending_duel_loser_key: String = ""
+var current_sect_event: Dictionary = {}
+var sect_event_choices: Dictionary = {}
+var sect_event_continue_votes: Dictionary = {}
 var ending_scroll_data: Dictionary = {}
 var transition_layer: CanvasLayer = null
 var transition_rect: ColorRect = null
@@ -854,7 +911,7 @@ func _npc_dialogue_for_event(event: String, context: Dictionary = {}) -> String:
 		"contest_fight":
 			return "不服。就这一手，看看天命站谁。"
 		"auction":
-			return "拍卖会鱼龙混杂，我看一眼价格再说。"
+			return "坊市今日人多，我先看一眼货品再说。"
 		"battle":
 			if temper == "greedy":
 				return "能跑就跑，跑不了再咬它一口。"
@@ -942,6 +999,7 @@ func change_state(new_state: int) -> void:
 
 	if current_state == GameState.ROUND_START and NetworkManager.is_host:
 		start_round()
+	_auto_save("state")
 
 
 func get_player_by_peer(peer_id: int) -> PlayerData:
@@ -1072,11 +1130,51 @@ func _finish_round_without_rest() -> void:
 	if not NetworkManager.is_host:
 		return
 	save_game(false)
+	_advance_after_round_end(true)
+
+
+func _advance_after_round_end(allow_sparring: bool = true) -> void:
+	if not NetworkManager.is_host:
+		return
+	if current_state == GameState.ENDING:
+		return
+	if current_state != GameState.BARGAIN:
+		change_state(GameState.BARGAIN)
+	_apply_round_end_grace()
 	if check_duel_trigger():
+		return
+	if allow_sparring and _should_trigger_sect_event():
+		_trigger_sect_event()
+		return
+	if _try_queue_npc_breakthrough():
+		return
+	_start_next_round_for_all()
+
+
+func _advance_after_sparring() -> void:
+	if not NetworkManager.is_host:
+		return
+	duel_data.clear()
+	duel_round_number = 0
+	duel_mode = "final"
+	pending_duel_winner_key = ""
+	pending_duel_loser_key = ""
+	_advance_after_round_end(false)
+
+
+func _start_next_round_for_all() -> void:
+	if not NetworkManager.is_host:
 		return
 	if not single_player_mode:
 		_start_new_round.rpc()
 	_start_new_round()
+
+
+func _clear_pending_tribulation_state() -> void:
+	pending_breakthrough_player = null
+	tribulation_next_realm = ""
+	pending_tribulation_data.clear()
+	tribulation_choices.clear()
 
 
 func _any_player_can_trigger_duel() -> bool:
@@ -1085,6 +1183,536 @@ func _any_player_can_trigger_duel() -> bool:
 
 func _can_player_trigger_duel(player: PlayerData) -> bool:
 	return player != null and player.realm == "元婴期" and _get_minor_stage(player) >= MINOR_STAGE_NAMES.size() and player.ling_li >= DUEL_LING_LI_REQ
+
+
+func _should_trigger_sect_event() -> bool:
+	if not NetworkManager.is_host:
+		return false
+	if lineup_locked or current_state == GameState.DUEL or current_state == GameState.ENDING or current_state == GameState.SECT_EVENT:
+		return false
+	if round_number <= 0 or SECT_EVENT_ROUND_INTERVAL <= 0:
+		return false
+	if round_number % SECT_EVENT_ROUND_INTERVAL != 0:
+		return false
+	if player_a == null or player_b == null or player_a.qi_xue <= 0 or player_b.qi_xue <= 0:
+		return false
+	check_set_bonus(player_a)
+	check_set_bonus(player_b)
+	var sect_a: String = _player_event_sect(player_a)
+	var sect_b: String = _player_event_sect(player_b)
+	return SECT_TYPES.has(sect_a) and SECT_TYPES.has(sect_b)
+
+
+func _player_event_sect(player: PlayerData) -> String:
+	if player == null:
+		return ""
+	check_set_bonus(player)
+	if int(player.final_attributes.get("identity_level", 0)) <= 0:
+		return ""
+	var sect_name: String = str(player.final_attributes.get("identity_sect", player.sect))
+	if SECT_TYPES.has(sect_name):
+		return sect_name
+	return ""
+
+
+func _trigger_sect_event() -> void:
+	if not NetworkManager.is_host:
+		return
+	var sect_a: String = _player_event_sect(player_a)
+	var sect_b: String = _player_event_sect(player_b)
+	if not SECT_TYPES.has(sect_a) or not SECT_TYPES.has(sect_b):
+		_start_next_round_for_all()
+		return
+	var event_type: String = "tournament" if sect_a == sect_b else "conflict"
+	var title: String = "宗门大比" if event_type == "tournament" else "宗门争端"
+	var desc: String = ""
+	var rules: String = ""
+	if event_type == "tournament":
+		desc = sect_a + "三年一比，门内同道各凭本事登台。切磋不伤性命，胜者得宗门赏赐。"
+		rules = "参加：连战3名同门NPC，逐场得奖励；双方全胜会师决赛。冠军得宗门奖品与身份分。"
+	else:
+		desc = sect_a + "与" + sect_b + "道统相争，先破对方宗门高手，再论最后胜负。此为切磋，不会陨落。"
+		rules = "参加：先打对方宗门NPC。胜者得灵石、功法与身份分；不参加会潜心修炼，但门派声望受损。"
+	current_sect_event = {
+		"id": Time.get_ticks_msec(),
+		"phase": "choice",
+		"type": event_type,
+		"title": title,
+		"desc": desc,
+		"rules": rules,
+		"round": round_number,
+		"sect_a": sect_a,
+		"sect_b": sect_b,
+		"choice_seconds": SECT_EVENT_CHOICE_SECONDS,
+	}
+	sect_event_choices.clear()
+	sect_event_continue_votes.clear()
+	change_state(GameState.SECT_EVENT)
+	var data: Dictionary = _sect_event_state_data("宗门事件触发，等待双方选择。")
+	NetworkManager.send_message("sect_event_started", data)
+	sect_event_started.emit(data)
+	_queue_sect_event_choice_timeout(int(current_sect_event.get("id", 0)))
+	save_game(false)
+
+
+func _sect_event_state_data(message: String = "") -> Dictionary:
+	var data: Dictionary = current_sect_event.duplicate(true)
+	data["message"] = message
+	data["choices"] = sect_event_choices.duplicate(true)
+	data["continue_votes"] = sect_event_continue_votes.duplicate(true)
+	data["player_a"] = _player_snapshot(player_a)
+	data["player_b"] = _player_snapshot(player_b)
+	return data
+
+
+func on_sect_event_started(data: Dictionary) -> void:
+	current_sect_event = data.duplicate(true)
+	sect_event_choices = (data.get("choices", {}) as Dictionary).duplicate(true)
+	sect_event_continue_votes = (data.get("continue_votes", {}) as Dictionary).duplicate(true)
+	_apply_player_snapshot(player_a, data.get("player_a", {}) as Dictionary)
+	_apply_player_snapshot(player_b, data.get("player_b", {}) as Dictionary)
+	change_state(GameState.SECT_EVENT)
+	sect_event_started.emit(data)
+
+
+func on_sect_event_updated(data: Dictionary) -> void:
+	current_sect_event = data.duplicate(true)
+	sect_event_choices = (data.get("choices", sect_event_choices) as Dictionary).duplicate(true)
+	sect_event_continue_votes = (data.get("continue_votes", sect_event_continue_votes) as Dictionary).duplicate(true)
+	_apply_player_snapshot(player_a, data.get("player_a", {}) as Dictionary)
+	_apply_player_snapshot(player_b, data.get("player_b", {}) as Dictionary)
+	sect_event_updated.emit(data)
+
+
+func on_sect_event_finished(data: Dictionary) -> void:
+	current_sect_event.clear()
+	sect_event_choices.clear()
+	sect_event_continue_votes.clear()
+	_apply_player_snapshot(player_a, data.get("player_a", {}) as Dictionary)
+	_apply_player_snapshot(player_b, data.get("player_b", {}) as Dictionary)
+	sect_event_finished.emit(data)
+
+
+func _sect_event_peer_ids() -> Array[int]:
+	var peer_ids: Array[int] = []
+	if player_a != null:
+		peer_ids.append(player_a.peer_id if player_a.peer_id > 0 else 1)
+	if player_b != null:
+		peer_ids.append(player_b.peer_id if player_b.peer_id > 0 else 2)
+	return peer_ids
+
+
+func _queue_sect_event_choice_timeout(event_id: int) -> void:
+	await get_tree().create_timer(SECT_EVENT_CHOICE_SECONDS).timeout
+	if not NetworkManager.is_host or current_state != GameState.SECT_EVENT:
+		return
+	if int(current_sect_event.get("id", -1)) != event_id or str(current_sect_event.get("phase", "")) != "choice":
+		return
+	for peer_id in _sect_event_peer_ids():
+		if not sect_event_choices.has(str(peer_id)):
+			sect_event_choices[str(peer_id)] = false
+	_try_resolve_sect_event()
+
+
+func on_sect_event_choice_received(peer_id: int, data: Dictionary) -> void:
+	if not NetworkManager.is_host or current_state != GameState.SECT_EVENT:
+		return
+	if str(current_sect_event.get("phase", "")) != "choice":
+		return
+	var choice_peer_id: int = peer_id
+	if choice_peer_id <= 0:
+		choice_peer_id = 1
+	var player: PlayerData = get_player_by_peer(choice_peer_id)
+	if player == null:
+		return
+	var participate: bool = bool(data.get("participate", false))
+	sect_event_choices[str(choice_peer_id)] = participate
+	if str(current_sect_event.get("type", "")) == "conflict" and participate:
+		_clear_sect_passive_penalty(player)
+	if single_player_mode and choice_peer_id == player_a.peer_id and player_b != null and not sect_event_choices.has(str(player_b.peer_id)):
+		sect_event_choices[str(player_b.peer_id)] = false if bool(data.get("timeout", false)) else _choose_npc_sect_event_participation()
+	var update_data: Dictionary = _sect_event_state_data("已记录选择，等待同道回应。")
+	NetworkManager.send_message("sect_event_updated", update_data)
+	sect_event_updated.emit(update_data)
+	_try_resolve_sect_event()
+
+
+func _choose_npc_sect_event_participation() -> bool:
+	if player_b == null:
+		return false
+	var max_hp: int = _get_player_max_hp(player_b)
+	var hp_rate: float = float(player_b.qi_xue) / float(maxi(1, max_hp))
+	var chance: float = 0.58
+	if hp_rate < 0.35:
+		chance -= 0.28
+	if get_visible_combat_power(player_b) > get_visible_combat_power(player_a) * 0.95:
+		chance += 0.16
+	var temper: String = str(selected_npc_profile.get("temper", "bold"))
+	if temper in ["bold", "greedy"]:
+		chance += 0.10
+	elif temper in ["kind", "soft"]:
+		chance -= 0.04
+	return rng.randf() < clampf(chance, 0.12, 0.86)
+
+
+func _try_resolve_sect_event() -> void:
+	if not NetworkManager.is_host or current_state != GameState.SECT_EVENT:
+		return
+	for peer_id in _sect_event_peer_ids():
+		if not sect_event_choices.has(str(peer_id)):
+			return
+	var result: Dictionary = _resolve_sect_event()
+	current_sect_event["phase"] = "result"
+	current_sect_event["result"] = result
+	current_sect_event["message"] = str(result.get("summary", "宗门事件已结算。"))
+	sect_event_continue_votes.clear()
+	check_set_bonus(player_a)
+	check_set_bonus(player_b)
+	var data: Dictionary = _sect_event_state_data(str(result.get("summary", "")))
+	NetworkManager.send_message("sect_event_updated", data)
+	sect_event_updated.emit(data)
+	save_game(false)
+
+
+func on_sect_event_continue_received(peer_id: int, _data: Dictionary = {}) -> void:
+	if not NetworkManager.is_host or current_state != GameState.SECT_EVENT:
+		return
+	if str(current_sect_event.get("phase", "")) != "result":
+		return
+	var continue_peer_id: int = peer_id
+	if continue_peer_id <= 0:
+		continue_peer_id = 1
+	sect_event_continue_votes[str(continue_peer_id)] = true
+	if single_player_mode and player_b != null and continue_peer_id == player_a.peer_id:
+		sect_event_continue_votes[str(player_b.peer_id)] = true
+	var update_data: Dictionary = _sect_event_state_data("等待双方读完宗门战报。")
+	NetworkManager.send_message("sect_event_updated", update_data)
+	sect_event_updated.emit(update_data)
+	for event_peer_id in _sect_event_peer_ids():
+		if not sect_event_continue_votes.has(str(event_peer_id)):
+			return
+	_finish_sect_event()
+
+
+func _finish_sect_event() -> void:
+	if not NetworkManager.is_host:
+		return
+	var data: Dictionary = _sect_event_state_data("宗门事件结束。")
+	NetworkManager.send_message("sect_event_finished", data)
+	on_sect_event_finished(data)
+	change_state(GameState.BARGAIN)
+	_start_next_round_for_all()
+
+
+func _resolve_sect_event() -> Dictionary:
+	var join_a: bool = bool(sect_event_choices.get(str(player_a.peer_id), false))
+	var join_b: bool = bool(sect_event_choices.get(str(player_b.peer_id), false))
+	var event_type: String = str(current_sect_event.get("type", "tournament"))
+	var lines: Array[String] = []
+	var summary: String = ""
+	if event_type == "tournament":
+		summary = _resolve_sect_tournament(join_a, join_b, lines)
+	else:
+		summary = _resolve_sect_conflict(join_a, join_b, lines)
+	return {
+		"summary": summary,
+		"lines": lines,
+		"join_a": join_a,
+		"join_b": join_b,
+	}
+
+
+func _resolve_sect_tournament(join_a: bool, join_b: bool, lines: Array[String]) -> String:
+	var sect_name: String = str(current_sect_event.get("sect_a", "宗门"))
+	if not join_a and not join_b:
+		lines.append("两人皆未赴会，" + sect_name + "大比静静落幕。")
+		return "宗门大比无人应战。"
+	var run_a: Dictionary = _sect_event_tournament_run(player_a) if join_a else {"wins": -1, "all_win": false, "lines": [player_a.player_name + "闭门潜修。"]}
+	var run_b: Dictionary = _sect_event_tournament_run(player_b) if join_b else {"wins": -1, "all_win": false, "lines": [player_b.player_name + "闭门潜修。"]}
+	lines.append_array(run_a.get("lines", []) as Array)
+	lines.append_array(run_b.get("lines", []) as Array)
+	if not join_a:
+		lines.append_array(_sect_event_private_cultivation(player_a, "潜心修炼") as Array)
+	if not join_b:
+		lines.append_array(_sect_event_private_cultivation(player_b, "潜心修炼") as Array)
+	var champion: PlayerData = null
+	var runner_up: PlayerData = null
+	if join_a and join_b and bool(run_a.get("all_win", false)) and bool(run_b.get("all_win", false)):
+		var spar: Dictionary = _sect_event_pvp_spar(player_a, player_b, sect_name + "会师决赛")
+		champion = spar.get("winner", null) as PlayerData
+		runner_up = spar.get("loser", null) as PlayerData
+		lines.append_array(spar.get("lines", []) as Array)
+	elif join_a and (not join_b or int(run_a.get("wins", 0)) > int(run_b.get("wins", -1))):
+		champion = player_a
+		runner_up = player_b if join_b else null
+	elif join_b and (not join_a or int(run_b.get("wins", 0)) > int(run_a.get("wins", -1))):
+		champion = player_b
+		runner_up = player_a if join_a else null
+	elif join_a and join_b:
+		var tie: Dictionary = _sect_event_pvp_spar(player_a, player_b, sect_name + "加试")
+		champion = tie.get("winner", null) as PlayerData
+		runner_up = tie.get("loser", null) as PlayerData
+		lines.append_array(tie.get("lines", []) as Array)
+	if champion != null:
+		lines.append(_grant_sect_event_champion_reward(champion, sect_name, 5))
+	if runner_up != null:
+		lines.append(_grant_random_equipped_technique_fragment(runner_up, "宗门大比亚军"))
+	elif join_a != join_b:
+		var solo_player: PlayerData = player_a if join_a else player_b
+		var solo_run: Dictionary = run_a if join_a else run_b
+		if solo_player != null and not bool(solo_run.get("all_win", false)):
+			var before_stage: String = get_cultivation_stage_name(solo_player)
+			solo_player.ling_li += 50
+			lines.append(_append_stage_change_to_message(solo_player, before_stage, solo_player.player_name + "虽败犹荣，修为 +50"))
+	return champion.player_name + "夺得" + sect_name + "大比魁首。" if champion != null else sect_name + "大比已结算。"
+
+
+func _sect_event_tournament_run(player: PlayerData) -> Dictionary:
+	var lines: Array[String] = []
+	var wins: int = 0
+	var multipliers: Array[float] = [0.7, 0.9, 1.0]
+	for i in range(multipliers.size()):
+		var pve: Dictionary = _sect_event_pve_fight(player, float(multipliers[i]), "NPC" + str(i + 1))
+		if bool(pve.get("win", false)):
+			wins += 1
+			match i:
+				0:
+					var before_stage: String = get_cultivation_stage_name(player)
+					player.ling_li += 30
+					lines.append(_append_stage_change_to_message(player, before_stage, player.player_name + "胜过首席弟子，修为 +30"))
+				1:
+					player.ling_shi += 200
+					lines.append(player.player_name + "胜过执事师兄，灵石 +200")
+				2:
+					lines.append(_grant_random_equipped_technique_fragment(player, "宗门大比"))
+		else:
+			lines.append(player.player_name + "止步第" + str(i + 1) + "战：" + str(pve.get("detail", "惜败")))
+			break
+	return {"wins": wins, "all_win": wins >= 3, "lines": lines}
+
+
+func _resolve_sect_conflict(join_a: bool, join_b: bool, lines: Array[String]) -> String:
+	var sect_a: String = str(current_sect_event.get("sect_a", ""))
+	var sect_b: String = str(current_sect_event.get("sect_b", ""))
+	if not join_a and not join_b:
+		lines.append("两宗都未出战，风波暂息。")
+		return "宗门争端无人应战。"
+	if join_a and join_b:
+		var pve_a: Dictionary = _sect_event_pve_fight(player_a, 1.1, sect_b + "高手")
+		var pve_b: Dictionary = _sect_event_pve_fight(player_b, 1.1, sect_a + "高手")
+		if bool(pve_a.get("win", false)):
+			player_a.ling_li += 50
+			player_a.ling_shi += 300
+			lines.append(player_a.player_name + "破" + sect_b + "高手，修为 +50，灵石 +300")
+		else:
+			player_a.ling_li += 30
+			lines.append(player_a.player_name + "败于" + sect_b + "高手，补偿修为 +30")
+		if bool(pve_b.get("win", false)):
+			player_b.ling_li += 50
+			player_b.ling_shi += 300
+			lines.append(player_b.player_name + "破" + sect_a + "高手，修为 +50，灵石 +300")
+		else:
+			player_b.ling_li += 30
+			lines.append(player_b.player_name + "败于" + sect_a + "高手，补偿修为 +30")
+		var winner: PlayerData = null
+		var loser: PlayerData = null
+		if bool(pve_a.get("win", false)) and bool(pve_b.get("win", false)):
+			var spar: Dictionary = _sect_event_pvp_spar(player_a, player_b, "宗门争端终局")
+			winner = spar.get("winner", null) as PlayerData
+			loser = spar.get("loser", null) as PlayerData
+			lines.append_array(spar.get("lines", []) as Array)
+		elif bool(pve_a.get("win", false)):
+			winner = player_a
+			loser = player_b
+		elif bool(pve_b.get("win", false)):
+			winner = player_b
+			loser = player_a
+		if winner != null:
+			lines.append(_grant_sect_conflict_winner_reward(winner))
+		if loser != null:
+			_grant_next_round_quality_bonus(loser)
+			lines.append(loser.player_name + "知耻后勇，下一轮机缘品质 +5%")
+		return winner.player_name + "赢下宗门争端。" if winner != null else "两宗争端未分胜负。"
+	var participant: PlayerData = player_a if join_a else player_b
+	var abstainer: PlayerData = player_b if join_a else player_a
+	var target_sect: String = sect_b if join_a else sect_a
+	var own_sect: String = sect_a if join_a else sect_b
+	var solo: Dictionary = _sect_event_pve_fight(participant, 1.1, target_sect + "高手")
+	if bool(solo.get("win", false)):
+		participant.ling_shi += 500
+		_add_sect_event_score(participant, own_sect, 5)
+		_apply_sect_passive_penalty(abstainer, 2)
+		lines.append(participant.player_name + "孤身破敌，灵石 +500，宗门身份分 +5；对方门派被动减半2轮")
+	else:
+		var before_stage: String = get_cultivation_stage_name(participant)
+		participant.ling_li += 50
+		lines.append(_append_stage_change_to_message(participant, before_stage, participant.player_name + "孤军奋战虽败犹荣，修为 +50"))
+	_apply_sect_passive_penalty(abstainer, 2)
+	_add_sect_event_score(abstainer, _player_event_sect(abstainer), -3)
+	lines.append(abstainer.player_name + "避战潜修，宗门身份分 -3，门派被动减半2轮")
+	lines.append_array(_sect_event_private_cultivation(abstainer, "潜心修炼") as Array)
+	return participant.player_name + "代表" + own_sect + "出战宗门争端。"
+
+
+func _sect_event_pve_fight(player: PlayerData, npc_multiplier: float, npc_name: String) -> Dictionary:
+	if player == null:
+		return {"win": false, "detail": "无人出战"}
+	var player_power: float = maxf(1.0, get_visible_combat_power(player))
+	var npc_power: float = maxf(1.0, player_power * npc_multiplier)
+	var chance: float = clampf(0.50 + (player_power - npc_power) / maxf(player_power, npc_power) * 0.55, 0.18, 0.88)
+	var win: bool = rng.randf() < chance
+	return {
+		"win": win,
+		"chance": chance,
+		"player_power": player_power,
+		"npc_power": npc_power,
+		"detail": npc_name + "战力约" + str(int(round(npc_power))) + "，胜率" + str(int(round(chance * 100.0))) + "%",
+	}
+
+
+func _sect_event_pvp_spar(first: PlayerData, second: PlayerData, title: String) -> Dictionary:
+	var lines: Array[String] = []
+	if first == null or second == null:
+		return {"winner": first, "loser": second, "lines": lines}
+	var power_a: float = maxf(1.0, get_visible_combat_power(first))
+	var power_b: float = maxf(1.0, get_visible_combat_power(second))
+	var chance_a: float = clampf(0.50 + (power_a - power_b) / maxf(power_a, power_b) * 0.45, 0.20, 0.80)
+	var first_wins: bool = rng.randf() < chance_a
+	var winner: PlayerData = first if first_wins else second
+	var loser: PlayerData = second if first_wins else first
+	lines.append(title + "：" + winner.player_name + "胜出（" + str(int(round(power_a))) + " vs " + str(int(round(power_b))) + "），切磋点到为止。")
+	return {"winner": winner, "loser": loser, "lines": lines}
+
+
+func _grant_random_equipped_technique_fragment(player: PlayerData, source: String) -> String:
+	if player == null:
+		return ""
+	if player.techniques.is_empty():
+		var before_stage: String = get_cultivation_stage_name(player)
+		player.ling_li += 30
+		return _append_stage_change_to_message(player, before_stage, player.player_name + "暂无上场功法，转为修为 +30")
+	var candidates: Array[Dictionary] = []
+	for technique in player.techniques:
+		if technique is Dictionary:
+			candidates.append(technique as Dictionary)
+	if candidates.is_empty():
+		return player.player_name + "未获得残卷"
+	var target: Dictionary = candidates[rng.randi_range(0, candidates.size() - 1)]
+	return player.player_name + "：" + _add_technique_fragment_progress(player, target, 1, source)
+
+
+func _grant_sect_event_champion_reward(player: PlayerData, sect_name: String, score_bonus: int) -> String:
+	if player == null:
+		return ""
+	_add_sect_event_score(player, sect_name, score_bonus)
+	var min_rank: int = _quality_rank("元婴级")
+	var prizes: Array[Dictionary] = []
+	for i in range(3):
+		var quality: String = _quality_by_rank(rng.randi_range(min_rank, QUALITY_ORDER.size() - 1))
+		var kind: String = str(["technique", "treasure", "companion"][i])
+		prizes.append({"kind": kind, "quality": quality})
+	var chosen: Dictionary = prizes[rng.randi_range(0, prizes.size() - 1)] as Dictionary
+	var quality: String = str(chosen.get("quality", "元婴级"))
+	var chosen_kind: String = str(chosen.get("kind", "technique"))
+	var reward_message: String = ""
+	match chosen_kind:
+		"treasure":
+			reward_message = _store_equipment_item(player, "treasure", generate_treasure_for_player(player, quality))
+		"companion":
+			reward_message = _gain_companion_or_ghost(player, generate_companion_for_player(player, quality))
+		_:
+			reward_message = _grant_technique_reward(player, quality)
+	return player.player_name + "获宗门魁首赏赐（三件宝物择一），" + reward_message + "；宗门身份分 +" + str(score_bonus)
+
+
+func _grant_sect_conflict_winner_reward(player: PlayerData) -> String:
+	if player == null:
+		return ""
+	var sect_name: String = _player_event_sect(player)
+	player.ling_shi += 800
+	_add_sect_event_score(player, sect_name, 8)
+	var quality: String = _quality_by_rank(rng.randi_range(_quality_rank("元婴级"), QUALITY_ORDER.size() - 1))
+	return player.player_name + "赢下争端，灵石 +800，" + _grant_technique_reward(player, quality) + "；宗门身份分 +8"
+
+
+func _sect_event_private_cultivation(player: PlayerData, source: String) -> Array[String]:
+	var lines: Array[String] = []
+	if player == null:
+		return lines
+	var ji_yuan_stat: int = int(player.stats.get("机缘", 0))
+	var good_count: int = 0
+	var bad_count: int = 0
+	for i in range(10):
+		if rng.randf() < 0.68:
+			var card: Dictionary = _sect_event_private_ji_yuan(ji_yuan_stat)
+			var message: String = _apply_ji_yuan(player, card, float(card.get("effect_value", card.get("value", 1.0))), "修")
+			if message != "":
+				good_count += 1
+		else:
+			var calamity: Dictionary = _sect_event_private_calamity(ji_yuan_stat)
+			var calamity_message: String = _apply_calamity(player, calamity, float(calamity.get("effect_value", calamity.get("value", 1.0))))
+			if calamity_message != "":
+				bad_count += 1
+	lines.append(player.player_name + source + "十抽已结算：机缘" + str(good_count) + "张，灾厄" + str(bad_count) + "张。")
+	return lines
+
+
+func _sect_event_private_ji_yuan(stat: int) -> Dictionary:
+	var choices: Array[String] = ["ling_li", "ling_shi", "heal_percent", "stat_up", "alchemy_material", "craft_material"]
+	var effect_type: String = choices[rng.randi_range(0, choices.size() - 1)]
+	return _generate_specific_ji_yuan(stat, effect_type) if effect_type != "heal_percent" else _build_ji_yuan_data(stat, {"name": "治疗", "base_effect": 30, "effect_type": "heal_percent"})
+
+
+func _sect_event_private_calamity(stat: int) -> Dictionary:
+	var quality: String = roll_quality(get_adjusted_quality_prob(stat, true))
+	var effect_type: String = "ling_li_loss" if rng.randf() < 0.55 else "hp_percent_loss"
+	var base_effect: int = 12 + _quality_rank(quality) * 6
+	var data: Dictionary = {
+		"quality": quality,
+		"type": "闭关暗劫",
+		"effect_type": effect_type,
+		"base_effect": base_effect,
+		"effect_value": base_effect,
+		"value": base_effect,
+	}
+	data["desc"] = generate_desc(data, true)
+	return data
+
+
+func _add_sect_event_score(player: PlayerData, sect_name: String, amount: int) -> void:
+	if player == null or not SECT_TYPES.has(sect_name) or amount == 0:
+		return
+	var scores: Dictionary = (player.final_attributes.get("sect_event_score_bonus", {}) as Dictionary).duplicate(true)
+	scores[sect_name] = float(scores.get(sect_name, 0.0)) + float(amount)
+	player.final_attributes["sect_event_score_bonus"] = scores
+
+
+func _apply_sect_passive_penalty(player: PlayerData, rounds: int) -> void:
+	if player == null:
+		return
+	player.final_attributes["sect_passive_halved_until"] = round_number + maxi(1, rounds)
+
+
+func _clear_sect_passive_penalty(player: PlayerData) -> void:
+	if player == null:
+		return
+	player.final_attributes.erase("sect_passive_halved_until")
+
+
+func _grant_next_round_quality_bonus(player: PlayerData) -> void:
+	if player == null:
+		return
+	player.final_attributes["sect_quality_bonus_round"] = round_number + 1
+
+
+func _sect_event_quality_shift_active() -> float:
+	var shift: float = 0.0
+	for player in [player_a, player_b]:
+		if player == null:
+			continue
+		if int(player.final_attributes.get("sect_quality_bonus_round", -1)) == round_number:
+			shift = maxf(shift, 0.05)
+	return shift
 
 
 func _start_rest_phase(final_duel: bool = false) -> void:
@@ -1121,7 +1749,27 @@ func has_save_game() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
 
+func _can_auto_save() -> bool:
+	if not AUTO_SAVE_ENABLED:
+		return false
+	if NetworkManager.connected and not NetworkManager.is_host:
+		return false
+	if player_a == null or player_b == null:
+		return false
+	if round_number <= 0 and current_state == GameState.STAT_ALLOCATION:
+		return false
+	return true
+
+
+func _auto_save(_reason: String = "") -> void:
+	if not _can_auto_save():
+		return
+	save_game(false)
+
+
 func save_game(manual: bool = false) -> String:
+	if NetworkManager.connected and not NetworkManager.is_host:
+		return "联机中由房主自动存档"
 	if player_a == null or player_b == null:
 		return "暂无可保存进度"
 	if not manual and round_number <= 0 and current_state == GameState.STAT_ALLOCATION:
@@ -1222,6 +1870,12 @@ func _save_payload(manual: bool) -> Dictionary:
 		"pending_backpack_items": pending_backpack_items.duplicate(true),
 		"final_duel_after_rest": final_duel_after_rest,
 		"lineup_locked": lineup_locked,
+		"duel_mode": duel_mode,
+		"duel_data": duel_data.duplicate(true),
+		"duel_round_number": duel_round_number,
+		"current_sect_event": current_sect_event.duplicate(true),
+		"sect_event_choices": sect_event_choices.duplicate(true),
+		"sect_event_continue_votes": sect_event_continue_votes.duplicate(true),
 		"scattered_pool": scattered_pool.duplicate(true),
 		"game_state": current_state,
 	}
@@ -1260,6 +1914,12 @@ func _restore_save_payload(data: Dictionary) -> void:
 	pending_backpack_items = (data.get("pending_backpack_items", {}) as Dictionary).duplicate(true)
 	final_duel_after_rest = bool(data.get("final_duel_after_rest", false))
 	lineup_locked = bool(data.get("lineup_locked", false))
+	duel_mode = str(data.get("duel_mode", "final"))
+	duel_data = (data.get("duel_data", {}) as Dictionary).duplicate(true)
+	duel_round_number = int(data.get("duel_round_number", 0))
+	current_sect_event = (data.get("current_sect_event", {}) as Dictionary).duplicate(true)
+	sect_event_choices = (data.get("sect_event_choices", {}) as Dictionary).duplicate(true)
+	sect_event_continue_votes = (data.get("sect_event_continue_votes", {}) as Dictionary).duplicate(true)
 	scattered_pool.clear()
 	var saved_scattered: Array = data.get("scattered_pool", []) as Array
 	for scattered_entry in saved_scattered:
@@ -1273,8 +1933,7 @@ func _restore_save_payload(data: Dictionary) -> void:
 	battle_choices.clear()
 	battle_continue_votes.clear()
 	current_contest.clear()
-	duel_data.clear()
-	duel_round_number = 0
+	duel_continue_votes.clear()
 	pending_duel_winner_key = ""
 	pending_duel_loser_key = ""
 	ending_scroll_data.clear()
@@ -1307,12 +1966,20 @@ func resume_loaded_state_after_scene_ready() -> void:
 			else:
 				bargain_ready.emit(current_bargain_index)
 		GameState.AUCTION:
+			_ensure_current_auction_lots()
 			auction_started.emit(current_auction.duplicate(true))
 		GameState.REST:
 			rest_started.emit(_rest_state_data("继续整备：整理背包与上场阵容"))
 		GameState.BATTLE:
 			battle_started.emit(current_enemy.duplicate(true))
 			battle_updated.emit(_battle_state_data())
+		GameState.DUEL:
+			if duel_data.is_empty() and NetworkManager.is_host:
+				start_duel_if_host()
+			elif not duel_data.is_empty():
+				duel_prepared.emit(duel_data.duplicate(true))
+		GameState.SECT_EVENT:
+			sect_event_started.emit(_sect_event_state_data(str(current_sect_event.get("message", "宗门事件继续。"))))
 
 
 func _loaded_bargain_points_to_hidden_card() -> bool:
@@ -1434,7 +2101,7 @@ func get_cultivation_stage_name_for(realm: String, ling_li: int) -> String:
 		return ""
 
 	var root_name: String = _realm_stage_root(realm)
-	var current_req: int = get_realm_ling_li_req(realm)
+	var current_req: int = 0
 	var next_req: int = get_next_major_realm_req(realm, ling_li)
 	if next_req <= current_req:
 		return root_name
@@ -1459,12 +2126,7 @@ func get_next_major_realm_req(realm: String, current_ling_li: int = 0) -> int:
 
 
 func get_current_stage_floor_req(player: PlayerData) -> int:
-	if player == null:
-		return 0
-	var stage: int = _get_minor_stage(player)
-	if stage <= 1:
-		return get_realm_ling_li_req(player.realm)
-	return _minor_stage_req(player, stage)
+	return 0
 
 
 func get_next_breakthrough_req(player: PlayerData) -> int:
@@ -1500,11 +2162,10 @@ func _get_minor_stage(player: PlayerData) -> int:
 
 func _minor_stage_req(player: PlayerData, target_stage: int) -> int:
 	var stage: int = clampi(target_stage, 1, MINOR_STAGE_NAMES.size())
-	var current_req: int = get_realm_ling_li_req(player.realm)
-	var next_req: int = get_next_major_realm_req(player.realm, player.ling_li)
-	var span: int = maxi(1, next_req - current_req)
+	var next_req: int = get_next_major_realm_req(player.realm, 0)
+	var span: int = maxi(1, next_req)
 	var step_index: int = maxi(0, stage - 1)
-	return current_req + int(ceil(float(span) * float(step_index) / float(MINOR_STAGE_NAMES.size())))
+	return int(ceil(float(span) * float(step_index) / float(MINOR_STAGE_NAMES.size())))
 
 
 func get_breakthrough_success_chance(player: PlayerData, breakthrough_type: String) -> float:
@@ -1533,6 +2194,14 @@ func _apply_breakthrough_failure(player: PlayerData, breakthrough_type: String) 
 	return {"ling_li_loss": loss, "hp_damage": damage}
 
 
+func _spend_breakthrough_ling_li(player: PlayerData, cost: int) -> int:
+	if player == null or cost <= 0:
+		return 0
+	var spent: int = mini(player.ling_li, cost)
+	player.ling_li = maxi(0, player.ling_li - spent)
+	return spent
+
+
 func get_realm_ling_li_req(realm: String) -> int:
 	if realm == "":
 		return 0
@@ -1548,6 +2217,8 @@ func _realm_stage_root(realm: String) -> String:
 
 func _trigger_final_duel() -> void:
 	lineup_locked = true
+	duel_mode = "final"
+	duel_continue_votes.clear()
 	duel_data.clear()
 	change_state(GameState.DUEL)
 	duel_triggered.emit()
@@ -1760,11 +2431,31 @@ func _start_auction_from_card(index: int, card: Dictionary) -> void:
 	on_auction_started(data)
 
 
+func _ensure_current_auction_lots() -> void:
+	if current_auction.is_empty():
+		return
+	var lots: Array = current_auction.get("lots", []) as Array
+	if not lots.is_empty():
+		return
+	var card: Dictionary = current_auction.get("card", {}) as Dictionary
+	if card.is_empty():
+		var auction_index: int = int(current_auction.get("index", current_card_index))
+		if auction_index >= 0 and auction_index < current_lottery_cards.size():
+			card = (current_lottery_cards[auction_index] as Dictionary).duplicate(true)
+			current_auction["card"] = card
+	var quality: String = str(card.get("quality", "筑基级"))
+	current_auction["lots"] = generate_auction_lots(quality)
+
+
 func on_auction_started(data: Dictionary) -> void:
+	var incoming_card: Dictionary = (data.get("card", {}) as Dictionary).duplicate(true)
+	var incoming_lots: Array = (data.get("lots", []) as Array).duplicate(true)
+	if incoming_lots.is_empty():
+		incoming_lots = generate_auction_lots(str(incoming_card.get("quality", "筑基级")))
 	current_auction = {
 		"index": int(data.get("index", current_card_index)),
-		"card": (data.get("card", {}) as Dictionary).duplicate(true),
-		"lots": (data.get("lots", []) as Array).duplicate(true),
+		"card": incoming_card,
+		"lots": incoming_lots,
 	}
 	_apply_player_snapshot(player_a, data.get("player_a", {}) as Dictionary)
 	_apply_player_snapshot(player_b, data.get("player_b", {}) as Dictionary)
@@ -1781,9 +2472,9 @@ func _grant_auction_entry_stones(card: Dictionary) -> String:
 		amount = AUCTION_STONE_BASE
 	player_a.ling_shi += amount
 	player_b.ling_shi += amount
-	var message: String = "拍卖会开张，双方各得启动灵石 +" + str(amount)
-	player_a.ji_yuan_list.append({"desc": message, "type": "拍卖会", "effect_value": amount})
-	player_b.ji_yuan_list.append({"desc": message, "type": "拍卖会", "effect_value": amount})
+	var message: String = "坊市开张，双方各得周转灵石 +" + str(amount) + "；三件货任选其一"
+	player_a.ji_yuan_list.append({"desc": message, "type": "坊市", "effect_value": amount})
+	player_b.ji_yuan_list.append({"desc": message, "type": "坊市", "effect_value": amount})
 	return message
 
 
@@ -1938,7 +2629,7 @@ func settle_card_bargain(choice_a: String, choice_b: String, card: Dictionary) -
 	var base_value: float = float(card.get("effect_value", card.get("value", 0)))
 	var name_a: String = player_a.player_name if player_a != null else "甲方"
 	var name_b: String = player_b.player_name if player_b != null else "乙方"
-	if effect_type in ["technique", "treasure", "dan", "companion", "auction", "quest", "enemy", "tribulation"] and base_value <= 0.0:
+	if effect_type in ["technique", "treasure", "dan", "alchemy_material", "craft_material", "companion", "auction", "quest", "enemy", "tribulation"] and base_value <= 0.0:
 		base_value = 1.0
 	result_a["card"] = card.duplicate(true)
 	result_b["card"] = card.duplicate(true)
@@ -2143,11 +2834,11 @@ func _normalize_shared_gain(card: Dictionary, value: float) -> float:
 
 
 func _is_indivisible_opportunity(effect_type: String) -> bool:
-	return effect_type in ["technique", "treasure", "companion", "dan", "quest"]
+	return effect_type in ["technique", "treasure", "companion", "dan", "alchemy_material", "craft_material", "quest"]
 
 
 func _is_dissipating_shared_opportunity(effect_type: String) -> bool:
-	return effect_type in ["technique", "treasure", "companion", "dan"]
+	return effect_type in ["technique", "treasure", "companion", "dan", "alchemy_material", "craft_material"]
 
 
 func _shared_dissolve_compensation(effect_type: String, quality: String) -> Dictionary:
@@ -2156,6 +2847,8 @@ func _shared_dissolve_compensation(effect_type: String, quality: String) -> Dict
 		"treasure": 150,
 		"companion": 100,
 		"dan": 100,
+		"alchemy_material": 80,
+		"craft_material": 80,
 	}
 	var base_amount: int = int(round(_quality_power(quality) * float(base_by_type.get(effect_type, 0))))
 	var amount_a: int = base_amount
@@ -2255,7 +2948,11 @@ func apply_bargain_result(player: PlayerData, result: Dictionary) -> void:
 			var reduction_message: String = _apply_emotion_school_calamity_reduction(player, result)
 			var formation_message: String = _apply_formation_calamity_reduction(player, result)
 			lose = float(result.get("lose", lose))
+			var hp_before_calamity: int = player.qi_xue
 			result["lose_message"] = _apply_calamity(player, card, lose)
+			var card_hp_damage: int = maxi(0, hp_before_calamity - player.qi_xue)
+			if card_hp_damage > 0:
+				result["hp_damage_taken"] = int(result.get("hp_damage_taken", 0)) + card_hp_damage
 			if reduction_message != "":
 				_append_result_message(result, "lose_message", reduction_message)
 			if formation_message != "":
@@ -2547,6 +3244,10 @@ func _apply_build_growth_from_bargain(player: PlayerData, result: Dictionary, ca
 					growth_amount += 2
 				else:
 					growth_amount += 1
+		"体修":
+			var card_hp_damage_taken: int = int(result.get("hp_damage_taken", 0))
+			if card_type == "灾厄" and card_hp_damage_taken > 0:
+				growth_amount += maxi(1, int(floor(float(card_hp_damage_taken) / 10.0)))
 	var effect_type: String = str(card.get("effect_type", ""))
 	var messages: Array[String] = []
 	var treasure_message: String = grow_treasure(player, growth_amount)
@@ -2895,7 +3596,11 @@ func get_visible_combat_power(player: PlayerData) -> float:
 	if player == null:
 		return 0.0
 	var stats: Dictionary = calculate_duel_stats(player)
-	return float(stats.get("攻击力", 0)) * 2.0 + float(stats.get("防御力", 0)) + float(player.qi_xue) * 0.5 + float(stats.get("法宝成长", 0))
+	return float(stats.get("战力", 0))
+
+
+func get_visible_combat_power_formula_text() -> String:
+	return "战力 = 攻击×2 + 防御 + 当前气血×0.5 + 速度×0.2 + 法宝成长"
 
 
 func get_enemy_visible_combat_power(enemy: Dictionary = {}) -> float:
@@ -3095,23 +3800,103 @@ func _choose_npc_bargain_choice(card: Dictionary) -> String:
 		hp_rate = float(player_b.qi_xue) / float(maxi(1, _get_player_max_hp(player_b)))
 
 	if card_type == "灾厄":
-		if hp_rate < 0.45:
+		var danger: float = _npc_calamity_danger(card, hp_rate)
+		if danger >= 0.78:
 			return "抢"
-		if temper == "kind" and quality_rank <= 1 and rng.randf() < 0.55:
+		if _npc_target_route(player_b) in ["体修", "阵修", "情修"] and danger <= 0.42 and rng.randf() < 0.72:
 			return "让"
-		if temper == "soft" and quality_rank <= 2 and rng.randf() < 0.45:
+		if temper == "kind" and quality_rank <= 1 and rng.randf() < 0.58:
 			return "让"
-		return "抢" if rng.randf() < 0.72 else "让"
+		if temper == "soft" and quality_rank <= 2 and rng.randf() < 0.48:
+			return "让"
+		return "抢" if rng.randf() < clampf(0.54 + danger * 0.34, 0.48, 0.90) else "让"
 
-	if effect_type in ["technique", "treasure", "companion", "adventure"]:
-		return "抢" if rng.randf() < 0.78 else "让"
-	if quality_rank >= 3:
-		return "抢" if temper != "kind" or rng.randf() < 0.60 else "让"
-	if temper == "greedy":
-		return "抢" if rng.randf() < 0.72 else "让"
-	if temper == "kind":
-		return "让" if rng.randf() < 0.55 else "抢"
-	return "抢" if rng.randf() < 0.55 else "让"
+	var grab_chance: float = _npc_opportunity_grab_chance(card, hp_rate)
+	return "抢" if rng.randf() < grab_chance else "让"
+
+
+func _npc_target_route(player: PlayerData) -> String:
+	if player == null:
+		return str(selected_npc_profile.get("route", "剑修"))
+	var route: String = str(player.final_attributes.get("npc_route", selected_npc_profile.get("route", "")))
+	return route if CULTIVATION_TYPES.has(route) else str(selected_npc_profile.get("route", "剑修"))
+
+
+func _npc_is_behind() -> bool:
+	if player_a == null or player_b == null:
+		return false
+	if get_visible_combat_power(player_b) + 8.0 < get_visible_combat_power(player_a) * 0.92:
+		return true
+	if _realm_rank(player_b.realm) < _realm_rank(player_a.realm):
+		return true
+	return player_b.ling_li + 60 < player_a.ling_li
+
+
+func _npc_player_often_yields() -> bool:
+	if player_a == null:
+		return false
+	var total: int = maxi(1, player_a.total_qiang_count + player_a.total_rang_count)
+	return float(player_a.total_rang_count) / float(total) >= 0.48
+
+
+func _npc_calamity_danger(card: Dictionary, hp_rate: float) -> float:
+	var danger: float = 0.22 + float(_quality_rank(str(card.get("quality", "筑基级")))) * 0.10
+	match str(card.get("effect_type", "")):
+		"hp_percent_loss", "hp_damage", "enemy", "tribulation":
+			danger += 0.24
+		"shou_yuan_loss":
+			danger += 0.16
+		"ling_li_loss":
+			danger += 0.08
+	if hp_rate < 0.30:
+		danger += 0.38
+	elif hp_rate < 0.52:
+		danger += 0.20
+	return clampf(danger, 0.0, 1.0)
+
+
+func _npc_opportunity_grab_chance(card: Dictionary, hp_rate: float) -> float:
+	var effect_type: String = str(card.get("effect_type", ""))
+	var quality_rank: int = _quality_rank(str(card.get("quality", "筑基级")))
+	var route: String = _npc_target_route(player_b)
+	var chance: float = 0.54
+	match effect_type:
+		"technique":
+			chance = 0.90 if player_b != null and player_b.techniques.size() < MAX_EQUIPPED_TECHNIQUES else 0.78
+		"treasure":
+			chance = 0.92 if player_b != null and player_b.treasures.is_empty() else 0.74
+		"companion":
+			chance = 0.84 if player_b != null and player_b.companions.size() < MAX_COMPANIONS else 0.66
+		"alchemy_material":
+			chance = 0.88 if route == "丹修" else 0.66
+		"craft_material":
+			chance = 0.88 if route == "器修" else 0.66
+		"ling_li":
+			chance = 0.78 if _npc_is_behind() else 0.58
+		"heal_percent":
+			chance = 0.92 if hp_rate < 0.72 else 0.30
+		"ling_shi":
+			chance = 0.76 if player_b != null and player_b.ling_shi < MARKET_HEAL_COST else 0.58
+		"stat_up", "shou_yuan", "adventure", "quest":
+			chance = 0.68
+		"auction":
+			chance = 0.56
+	if quality_rank >= _quality_rank("元婴级"):
+		chance += 0.10
+	if _npc_is_behind():
+		chance += 0.12
+	if _npc_player_often_yields() and effect_type in ["technique", "treasure", "companion", "alchemy_material", "craft_material", "ling_li"]:
+		chance += 0.08
+	match str(selected_npc_profile.get("temper", "bold")):
+		"greedy":
+			chance += 0.06
+		"bold":
+			chance += 0.03
+		"kind":
+			chance -= 0.03
+		"soft":
+			chance -= 0.02
+	return clampf(chance, 0.18, 0.95)
 
 
 func _queue_npc_continue() -> void:
@@ -3221,13 +4006,22 @@ func _choose_npc_battle_action() -> String:
 	var hp_rate: float = 1.0
 	if player_b != null:
 		hp_rate = float(player_b.qi_xue) / float(maxi(1, _get_player_max_hp(player_b)))
-	if hp_rate < 0.28:
-		return "逃跑"
+	var enemy_hp: int = int(current_enemy.get("hp", 0))
+	var estimated_damage: float = _estimate_battle_action_damage(player_b)
+	if enemy_hp > 0 and estimated_damage >= float(enemy_hp) and hp_rate > 0.34:
+		return "抢攻"
+	if hp_rate < 0.22:
+		return "逃跑" if get_escape_success_chance(player_b) >= 0.38 else "周旋"
+	if hp_rate < 0.52:
+		return "周旋" if rng.randf() < 0.82 else "逃跑"
 	var temper: String = str(selected_npc_profile.get("temper", "bold"))
+	var threat_level: int = _battle_enemy_threat_level()
+	if threat_level >= 2 and hp_rate < 0.72:
+		return "周旋" if rng.randf() < 0.72 else "抢攻"
 	if temper == "bold":
 		return "抢攻" if rng.randf() < 0.68 else "周旋"
 	if temper == "greedy":
-		return "逃跑" if hp_rate < 0.55 and rng.randf() < 0.45 else "抢攻"
+		return "逃跑" if hp_rate < 0.58 and rng.randf() < 0.34 else ("抢攻" if rng.randf() < 0.62 else "周旋")
 	if temper == "kind":
 		return "周旋" if rng.randf() < 0.62 else "抢攻"
 	return "周旋" if rng.randf() < 0.55 else "抢攻"
@@ -3250,12 +4044,12 @@ func _choose_npc_tribulation_choice() -> String:
 	if player_b != null:
 		hp_rate = float(player_b.qi_xue) / float(maxi(1, _get_player_max_hp(player_b)))
 	var temper: String = str(selected_npc_profile.get("temper", "bold"))
-	if hp_rate < 0.42:
+	if hp_rate < 0.50:
 		return "躲"
 	if pending_breakthrough_player == player_b:
-		return "扛" if hp_rate > 0.65 else "躲"
+		return "扛" if hp_rate > 0.74 else "躲"
 	if temper == "kind" or temper == "soft":
-		return "扛" if rng.randf() < 0.60 else "躲"
+		return "扛" if hp_rate > 0.66 and rng.randf() < 0.58 else "躲"
 	return "躲" if rng.randf() < 0.62 else "扛"
 
 
@@ -3274,14 +4068,291 @@ func _queue_npc_final_choice() -> void:
 func _auto_clear_npc_pending_backpack() -> void:
 	if player_b == null:
 		return
-	if not pending_backpack_items.has(str(player_b.peer_id)):
-		return
-	var message: String = _try_store_pending_backpack_item(player_b)
+	var messages: Array[String] = []
+	var had_pending: bool = pending_backpack_items.has(str(player_b.peer_id))
+	var before_message: String = _npc_auto_manage_inventory(player_b)
+	if before_message != "":
+		messages.append(before_message)
+	var message: String = ""
+	if had_pending:
+		message = _try_store_pending_backpack_item(player_b)
+		if message != "":
+			messages.append(message)
+	var after_message: String = _npc_auto_manage_inventory(player_b)
+	if after_message != "":
+		messages.append(after_message)
 	if pending_backpack_items.has(str(player_b.peer_id)):
 		message = discard_pending_backpack_item(player_b)
-	var update_data: Dictionary = _backpack_update_data(player_b.peer_id, player_b.player_name + "整理背包：" + message)
+		if message != "":
+			messages.append(message)
+	if messages.is_empty():
+		return
+	var update_data: Dictionary = _backpack_update_data(player_b.peer_id, player_b.player_name + "整理背包：" + "；".join(messages))
 	NetworkManager.send_message("backpack_updated", update_data)
 	on_backpack_updated(update_data)
+
+
+func _npc_auto_manage_inventory(player: PlayerData) -> String:
+	if player == null:
+		return ""
+	var messages: Array[String] = []
+	_normalize_player_technique_inventory(player)
+	var recover_message: String = _npc_auto_recover(player)
+	if recover_message != "":
+		messages.append(recover_message)
+	for kind in ["technique", "treasure", "companion"]:
+		var equip_message: String = _npc_auto_equip_best_kind(player, kind)
+		if equip_message != "":
+			messages.append(equip_message)
+	var craft_message: String = _npc_auto_craft(player)
+	if craft_message != "":
+		messages.append(craft_message)
+	var trim_message: String = _npc_trim_backpack_overflow(player)
+	if trim_message != "":
+		messages.append(trim_message)
+	check_set_bonus(player)
+	return "；".join(messages)
+
+
+func _npc_auto_recover(player: PlayerData) -> String:
+	if player == null:
+		return ""
+	if int(player.final_attributes.get("npc_recover_round", -999)) == round_number:
+		return ""
+	var max_hp: int = _get_player_max_hp(player)
+	var hp_rate: float = float(player.qi_xue) / float(maxi(1, max_hp))
+	if hp_rate >= 0.58:
+		return ""
+	if player.ling_shi >= MARKET_HEAL_COST:
+		player.ling_shi -= MARKET_HEAL_COST
+		var heal_amount: int = _heal_player_percent(player, MARKET_HEAL_PCT)
+		player.final_attributes["npc_recover_round"] = round_number
+		return "花" + str(MARKET_HEAL_COST) + "灵石疗伤，气血+" + str(heal_amount)
+	if hp_rate < 0.26:
+		var free_heal: int = _heal_player_percent(player, 0.12)
+		player.final_attributes["npc_recover_round"] = round_number
+		return "打坐护住心脉，气血+" + str(free_heal)
+	return ""
+
+
+func _npc_auto_craft(player: PlayerData) -> String:
+	if player == null or _is_alchemy_blocked():
+		return ""
+	if int(player.final_attributes.get("npc_craft_round", -999)) == round_number:
+		return ""
+	var mode: String = _npc_choose_craft_mode(player)
+	if mode == "":
+		return ""
+	var grade: String = _npc_roll_craft_grade(player, mode)
+	var message: String = perform_alchemy(player, grade) if mode == "alchemy" else perform_refining(player, grade)
+	if message == "" or message.begins_with("缺少") or message.contains("暂时不能") or message.contains("先备"):
+		return ""
+	player.final_attributes["npc_craft_round"] = round_number
+	var title: String = "开炉炼丹" if mode == "alchemy" else "开炉炼器"
+	return title + "：" + message
+
+
+func _npc_choose_craft_mode(player: PlayerData) -> String:
+	var alchemy_status: Dictionary = get_alchemy_status(player)
+	var refining_status: Dictionary = get_refining_status(player)
+	var can_alchemy: bool = bool(alchemy_status.get("can", false))
+	var can_refining: bool = bool(refining_status.get("can", false))
+	if not can_alchemy and not can_refining:
+		return ""
+	var route: String = _npc_target_route(player)
+	var alchemy_score: float = -999.0
+	if can_alchemy:
+		alchemy_score = 25.0
+		if route == "丹修":
+			alchemy_score += 55.0
+		if str(alchemy_status.get("dan_name", "")) != "":
+			alchemy_score += 70.0
+		var hp_rate: float = float(player.qi_xue) / float(maxi(1, _get_player_max_hp(player)))
+		if hp_rate < 0.82:
+			alchemy_score += (0.82 - hp_rate) * 70.0
+		alchemy_score += minf(18.0, float(_material_count(player, "alchemy")) * 4.0)
+	var refining_score: float = -999.0
+	if can_refining:
+		refining_score = 25.0
+		if route == "器修":
+			refining_score += 55.0
+		var treasure: Dictionary = _get_equipped_treasure(player)
+		if not treasure.is_empty():
+			_prepare_treasure(treasure, _player_sect(player))
+			if int(treasure.get("awakening_level", 0)) <= 0:
+				refining_score += 36.0
+			var threshold: int = maxi(1, int(treasure.get("awaken_threshold", treasure.get("growth_max", 10))))
+			var growth_rate: float = float(int(treasure.get("growth_value", 0))) / float(threshold)
+			refining_score += clampf(1.0 - growth_rate, 0.0, 1.0) * 24.0
+		refining_score += minf(18.0, float(_material_count(player, "craft")) * 4.0)
+	if alchemy_score < 32.0 and refining_score < 32.0:
+		return ""
+	if is_equal_approx(alchemy_score, refining_score):
+		return "alchemy" if rng.randf() < 0.5 else "refining"
+	return "alchemy" if alchemy_score > refining_score else "refining"
+
+
+func _npc_roll_craft_grade(player: PlayerData, mode: String) -> String:
+	var craft_mode: String = "refining" if mode == "refining" else "alchemy"
+	var stat_score: int = _craft_stat_score(player, craft_mode)
+	var route: String = _npc_target_route(player)
+	var route_fit: bool = (mode == "alchemy" and route == "丹修") or (mode == "refining" and route == "器修")
+	var perfect_chance: float = clampf(0.08 + float(stat_score) * 0.018 + (0.08 if route_fit else 0.0), 0.05, 0.46)
+	var miss_chance: float = clampf(0.30 - float(stat_score) * 0.022 - (0.08 if route_fit else 0.0), 0.04, 0.30)
+	var roll: float = rng.randf()
+	if roll < perfect_chance:
+		return "perfect"
+	if roll < perfect_chance + miss_chance:
+		return "miss"
+	return "good"
+
+
+func _npc_auto_equip_best_kind(player: PlayerData, kind: String) -> String:
+	if player == null:
+		return ""
+	var changed_labels: Array[String] = []
+	for _pass in range(8):
+		var best_index: int = _npc_best_backpack_item_index(player, kind)
+		if best_index < 0:
+			break
+		var best_entry: Dictionary = player.backpack[best_index] as Dictionary
+		var best_data: Dictionary = best_entry.get("data", {}) as Dictionary
+		var best_score: float = _npc_item_score(player, kind, best_data)
+		var should_equip: bool = false
+		var target_index: int = -1
+		match kind:
+			"technique":
+				if player.techniques.size() < MAX_EQUIPPED_TECHNIQUES:
+					should_equip = true
+				else:
+					target_index = _npc_worst_equipped_index(player, kind)
+					should_equip = target_index >= 0 and best_score > _npc_item_score(player, kind, player.techniques[target_index] as Dictionary) + 12.0
+			"treasure":
+				if player.treasures.is_empty():
+					should_equip = true
+				else:
+					target_index = 0
+					should_equip = best_score > _npc_item_score(player, kind, player.treasures[0] as Dictionary) + 10.0
+			"companion":
+				if player.companions.size() < MAX_COMPANIONS:
+					should_equip = true
+				else:
+					target_index = _npc_worst_equipped_index(player, kind)
+					should_equip = target_index >= 0 and best_score > _npc_item_score(player, kind, player.companions[target_index] as Dictionary) + 10.0
+		if not should_equip:
+			break
+		var label: String = _backpack_item_label(best_entry)
+		var result: String = equip_from_backpack(player, best_index, kind, target_index)
+		if result == "" or result.begins_with("未选择") or result.contains("不能"):
+			break
+		changed_labels.append(label)
+	if changed_labels.is_empty():
+		return ""
+	return "换上" + "、".join(changed_labels)
+
+
+func _npc_best_backpack_item_index(player: PlayerData, kind: String) -> int:
+	var best_index: int = -1
+	var best_score: float = -999999.0
+	for i in range(player.backpack.size()):
+		var entry: Dictionary = player.backpack[i] as Dictionary
+		if str(entry.get("kind", "")) != kind:
+			continue
+		var score: float = _npc_item_score(player, kind, entry.get("data", {}) as Dictionary)
+		if score > best_score:
+			best_score = score
+			best_index = i
+	return best_index
+
+
+func _npc_worst_backpack_item_index(player: PlayerData, kind: String) -> int:
+	var worst_index: int = -1
+	var worst_score: float = 999999.0
+	for i in range(player.backpack.size()):
+		var entry: Dictionary = player.backpack[i] as Dictionary
+		if str(entry.get("kind", "")) != kind:
+			continue
+		var score: float = _npc_item_score(player, kind, entry.get("data", {}) as Dictionary)
+		if score < worst_score:
+			worst_score = score
+			worst_index = i
+	return worst_index
+
+
+func _npc_worst_equipped_index(player: PlayerData, kind: String) -> int:
+	var items: Array = []
+	match kind:
+		"technique":
+			items = player.techniques
+		"companion":
+			items = player.companions
+		"treasure":
+			items = player.treasures
+	var worst_index: int = -1
+	var worst_score: float = 999999.0
+	for i in range(items.size()):
+		if not items[i] is Dictionary:
+			continue
+		var score: float = _npc_item_score(player, kind, items[i] as Dictionary)
+		if score < worst_score:
+			worst_score = score
+			worst_index = i
+	return worst_index
+
+
+func _npc_item_score(player: PlayerData, kind: String, item_data: Dictionary) -> float:
+	if item_data.is_empty():
+		return -9999.0
+	var quality: String = str(item_data.get("quality", "炼气级"))
+	var score: float = float(_quality_rank(quality)) * 100.0
+	var route: String = _npc_target_route(player)
+	var tags: Array[String] = _item_cultivation_tags(item_data)
+	if tags.has(route):
+		score += 90.0
+	if str(item_data.get("primary_cultivation_tag", "")) == route or str(item_data.get("growth_type", "")) == route:
+		score += 35.0
+	match kind:
+		"technique":
+			var bonuses: Dictionary = item_data.get("bonuses", item_data.get("base_bonuses", {})) as Dictionary
+			for bonus_name in bonuses:
+				score += minf(45.0, absf(float(bonuses[bonus_name])) * 180.0)
+			score += _technique_stage_multiplier(item_data) * 22.0
+		"treasure":
+			var prepared: Dictionary = _prepare_treasure(item_data, _player_sect(player))
+			score += float(prepared.get("battle_damage", prepared.get("base_attack", 0))) * 9.0
+			score += float(prepared.get("growth_value", 0)) * 1.2
+			if int(prepared.get("awakening_level", 0)) > 0 or bool(prepared.get("awakened", false)):
+				score += 55.0
+		"companion":
+			_prepare_companion(item_data, player)
+			score += float(item_data.get("bond", 0)) * 4.0
+			score += absf(_companion_effective_bonus_value(item_data)) * 210.0
+		"material":
+			var material_type: String = str(item_data.get("material_type", "alchemy"))
+			if route == "丹修" and material_type == "alchemy":
+				score += 60.0
+			if route == "器修" and material_type == "craft":
+				score += 60.0
+	return score
+
+
+func _npc_trim_backpack_overflow(player: PlayerData) -> String:
+	if player == null:
+		return ""
+	var removed: Array[String] = []
+	for kind in ["technique", "treasure", "companion", "material"]:
+		var limit: int = get_backpack_kind_limit(kind)
+		while limit > 0 and _backpack_kind_count(player, kind) > limit:
+			var remove_index: int = _npc_worst_backpack_item_index(player, kind)
+			if remove_index < 0:
+				break
+			var entry: Dictionary = player.backpack[remove_index] as Dictionary
+			removed.append(_backpack_item_label(entry))
+			_add_to_scattered_pool(entry, player.peer_id, "npc_auto_discard")
+			player.backpack.remove_at(remove_index)
+	if removed.is_empty():
+		return ""
+	return "舍弃低阶" + "、".join(removed)
 
 
 func _apply_contest_to_settlement(settled: Dictionary, contest_result: Dictionary, card: Dictionary) -> void:
@@ -3405,6 +4476,7 @@ func on_bargain_settled(data: Dictionary) -> void:
 	bargain_choices.clear()
 	current_contest.clear()
 	bargain_result.emit(data)
+	_auto_save("bargain_settled")
 
 
 func on_bargain_continue_received(peer_id: int, _data: Dictionary = {}) -> void:
@@ -3453,7 +4525,7 @@ func get_adjusted_quality_prob(ji_yuan_stat: int, is_calamity: bool = false) -> 
 		return _calamity_quality_probs_for_current_realm()
 	var realm_rank: int = _highest_player_realm_rank()
 	var probs: Dictionary = _reward_quality_probs_for_realm_rank(realm_rank)
-	var shift: float = minf(0.12, float(ji_yuan_stat) * 0.012)
+	var shift: float = minf(0.12, float(ji_yuan_stat) * 0.012) + _sect_event_quality_shift_active()
 	var low_qualities: Array = _quality_low_group_for_realm(realm_rank)
 	var high_qualities: Array = _quality_high_group_for_realm(realm_rank)
 	var transfer: float = absf(shift)
@@ -3796,8 +4868,10 @@ func _clamp_enemy_quality_for_current_realm(enemy_quality: String) -> String:
 
 func generate_auction_lots(card_quality: String) -> Array:
 	var lots: Array = []
-	var lot_count: int = rng.randi_range(2, 3)
-	var special_kinds: Array[String] = ["technique", "treasure", "companion"]
+	var lot_count: int = 3
+	var special_kinds: Array[String] = ["technique", "treasure", "companion", "alchemy_material", "craft_material", "dan"]
+	var first_kind: String = "alchemy_material" if rng.randf() < 0.5 else "craft_material"
+	lots.append(_make_auction_lot(first_kind, card_quality))
 	while lots.size() < lot_count:
 		var kind: String = special_kinds[rng.randi_range(0, special_kinds.size() - 1)]
 		var lot: Dictionary = _make_auction_lot(kind, card_quality)
@@ -3807,14 +4881,42 @@ func generate_auction_lots(card_quality: String) -> Array:
 
 func _make_auction_lot(kind: String, quality: String) -> Dictionary:
 	match kind:
+		"cultivation":
+			var cultivation_gain: int = maxi(12, int(round(float(MARKET_CULTIVATION_GAIN) * _quality_power(quality))))
+			return {
+				"kind": kind,
+				"name": quality_display_name(quality) + "吐纳丹",
+				"quality": quality,
+				"desc": "立即获得修为 +" + str(cultivation_gain),
+				"price": _market_buy_price("cultivation", quality),
+				"value": cultivation_gain,
+			}
+		"heal":
+			return {
+				"kind": kind,
+				"name": quality_display_name(quality) + "回春散",
+				"quality": quality,
+				"desc": "立即回复30%气血",
+				"price": _market_buy_price("heal", quality),
+				"value": 1,
+			}
+		"dan":
+			return {
+				"kind": kind,
+				"name": quality_display_name(quality) + "突破丹",
+				"quality": quality,
+				"desc": "补足当前境界所需突破丹",
+				"price": _market_buy_price("dan", quality),
+				"value": 1,
+			}
 		"technique":
 			var technique: Dictionary = generate_technique(quality)
 			return {
 				"kind": kind,
 				"name": "功法《" + str(technique.get("name", "未知功法")) + "》",
 				"quality": str(technique.get("quality", quality)),
-				"desc": "购得后加入功法/背包",
-				"price": rng.randi_range(500, 1500),
+				"desc": "收入背包，装备后生效",
+				"price": _market_buy_price("technique", str(technique.get("quality", quality))),
 				"value": 1,
 				"item_data": technique,
 			}
@@ -3824,8 +4926,8 @@ func _make_auction_lot(kind: String, quality: String) -> Dictionary:
 				"kind": kind,
 				"name": "法宝【" + str(treasure.get("name", "未知法宝")) + "】",
 				"quality": str(treasure.get("quality", quality)),
-				"desc": "购得后加入法宝/背包",
-				"price": rng.randi_range(300, 1000),
+				"desc": "收入背包，抢攻可用",
+				"price": _market_buy_price("treasure", str(treasure.get("quality", quality))),
 				"value": 1,
 				"item_data": treasure,
 			}
@@ -3835,20 +4937,77 @@ func _make_auction_lot(kind: String, quality: String) -> Dictionary:
 				"kind": kind,
 				"name": "伙伴「" + str(companion.get("name", "未知伙伴")) + "」",
 				"quality": str(companion.get("quality", quality)),
-				"desc": "购得后加入伙伴/背包",
-				"price": rng.randi_range(400, 1200),
+				"desc": "收入背包，提供羁绊",
+				"price": _market_buy_price("companion", str(companion.get("quality", quality))),
 				"value": 1,
 				"item_data": companion,
+			}
+		"alchemy_material":
+			var herb: Dictionary = _make_material_item("alchemy", quality)
+			return {
+				"kind": kind,
+				"name": "灵草「" + str(herb.get("name", "灵草")) + "」",
+				"quality": quality,
+				"desc": "炼丹材料，收入背包",
+				"price": _market_buy_price("alchemy_material", quality),
+				"value": 1,
+				"item_data": herb,
+			}
+		"craft_material":
+			var ore: Dictionary = _make_material_item("craft", quality)
+			return {
+				"kind": kind,
+				"name": "矿材「" + str(ore.get("name", "矿材")) + "」",
+				"quality": quality,
+				"desc": "炼器材料，收入背包",
+				"price": _market_buy_price("craft_material", quality),
+				"value": 1,
+				"item_data": ore,
 			}
 	return {
 		"kind": "technique",
 		"name": quality_display_name(quality) + "功法残卷",
 		"quality": quality,
 		"desc": "获得随机" + quality_display_name(quality) + "功法",
-		"price": rng.randi_range(500, 1500),
+		"price": _market_buy_price("technique", quality),
 		"value": 1,
 		"item_data": generate_technique(quality),
 	}
+
+
+func _market_base_price(kind: String) -> int:
+	match kind:
+		"cultivation":
+			return 230
+		"heal":
+			return 180
+		"technique":
+			return 620
+		"treasure":
+			return 520
+		"companion":
+			return 360
+		"alchemy_material":
+			return 180
+		"craft_material":
+			return 190
+		"dan":
+			return 420
+		_:
+			return 240
+
+
+func _market_kind_for_entry_kind(kind: String, data: Dictionary = {}) -> String:
+	if kind == "material":
+		return "craft_material" if str(data.get("material_type", "")) == "craft" else "alchemy_material"
+	return kind
+
+
+func _market_buy_price(kind: String, quality: String) -> int:
+	var base_value: int = _market_base_price(kind)
+	var quality_rate: float = float(QUALITY_MULTIPLIER.get(quality, 1.0))
+	var jitter: float = rng.randf_range(0.92, 1.12)
+	return maxi(1, int(round(float(base_value) * quality_rate * jitter)))
 
 
 func _roll_calamity_type_for_quality(quality: String) -> Dictionary:
@@ -3927,7 +5086,7 @@ func _prepare_technique(technique: Dictionary) -> Dictionary:
 	prepared.erase("combo_desc")
 	prepared.erase("resonances")
 	prepared.erase("is_core_technique")
-	prepared["base_bonuses"] = _normalize_technique_bonuses(raw_base_bonuses)
+	prepared["base_bonuses"] = _normalize_technique_bonuses(raw_base_bonuses, _item_cultivation_fallback(prepared))
 	prepared["bonuses"] = (prepared["base_bonuses"] as Dictionary).duplicate(true)
 	prepared["affixes_applied"] = false
 	if not prepared.has("technique_realm"):
@@ -3940,19 +5099,120 @@ func _prepare_technique(technique: Dictionary) -> Dictionary:
 	return prepared
 
 
-func _normalize_technique_bonuses(raw_bonuses: Dictionary) -> Dictionary:
+func _normalize_technique_bonuses(raw_bonuses: Dictionary, preferred_tag: String = "") -> Dictionary:
 	var bonuses: Dictionary = {}
 	for bonus_name in raw_bonuses:
 		var key: String = str(bonus_name)
 		if not TECHNIQUE_BONUS_KEYS.has(key):
 			continue
 		var value: float = float(raw_bonuses[bonus_name])
+		if key == "全属性":
+			var converted_key: String = _technique_preferred_bonus_key(preferred_tag)
+			if converted_key == "":
+				converted_key = "气血上限"
+			bonuses[converted_key] = float(bonuses.get(converted_key, 0.0)) + value * TECHNIQUE_ALL_ATTRIBUTE_CONVERSION
+			continue
 		if key == "速度" and absf(value) > 1.0:
 			value = value / 100.0
 		bonuses[key] = float(bonuses.get(key, 0.0)) + value
 	if bonuses.is_empty():
-		bonuses["灵力获取"] = 0.06
-	return bonuses
+		var fallback_key: String = _technique_preferred_bonus_key(preferred_tag)
+		var default_key: String = fallback_key if fallback_key != "" else "灵力获取"
+		bonuses[default_key] = 0.06
+	return _specialize_technique_bonus_dict(bonuses, preferred_tag, TECHNIQUE_MAX_BASE_BONUS_KEYS)
+
+
+func _technique_preferred_bonus_key(cultivation_tag: String) -> String:
+	return str(CULTIVATION_PRIMARY_BONUS_KEYS.get(cultivation_tag, ""))
+
+
+func _technique_bonus_rank_score(bonus_name: String, value: float, preferred_tag: String) -> float:
+	var score: float = absf(value)
+	var preferred_key: String = _technique_preferred_bonus_key(preferred_tag)
+	if bonus_name == preferred_key:
+		score *= 1.8
+	match bonus_name:
+		"战斗减伤", "吸血", "破防", "反伤", "暴击率", "闪避率", "每轮回血":
+			score *= 1.25
+		"速度":
+			score *= 1.05
+	return score
+
+
+func _specialize_technique_bonus_dict(raw_bonuses: Dictionary, preferred_tag: String, max_keys: int) -> Dictionary:
+	var normalized: Dictionary = {}
+	for bonus_name in raw_bonuses:
+		var key: String = str(bonus_name)
+		if key == "全属性":
+			key = _technique_preferred_bonus_key(preferred_tag)
+			if key == "":
+				key = "气血上限"
+		if not TECHNIQUE_BONUS_KEYS.has(key) or key == "全属性":
+			continue
+		var value: float = float(raw_bonuses[bonus_name])
+		if key == "速度" and absf(value) > 1.0:
+			value = value / 100.0
+		if absf(value) < 0.0001:
+			continue
+		normalized[key] = float(normalized.get(key, 0.0)) + value
+	if normalized.size() <= max_keys:
+		return normalized
+
+	var selected: Dictionary = {}
+	var selected_order: Array[String] = []
+	var candidates: Dictionary = normalized.duplicate(true)
+	var forced_key: String = _technique_preferred_bonus_key(preferred_tag)
+	if max_keys > 0 and forced_key != "" and candidates.has(forced_key):
+		selected[forced_key] = float(candidates[forced_key])
+		selected_order.append(forced_key)
+		candidates.erase(forced_key)
+	while selected_order.size() < max_keys and not candidates.is_empty():
+		var best_key: String = ""
+		var best_score: float = -1.0
+		for bonus_name in candidates:
+			var score: float = _technique_bonus_rank_score(str(bonus_name), float(candidates[bonus_name]), preferred_tag)
+			if score > best_score:
+				best_score = score
+				best_key = str(bonus_name)
+		if best_key == "":
+			break
+		selected[best_key] = float(candidates[best_key])
+		selected_order.append(best_key)
+		candidates.erase(best_key)
+
+	if selected_order.is_empty():
+		return normalized
+	var primary_key: String = selected_order[0]
+	for bonus_name in candidates:
+		var value: float = float(candidates[bonus_name])
+		if value > 0.0:
+			selected[primary_key] = float(selected.get(primary_key, 0.0)) + value * TECHNIQUE_SPLIT_BONUS_CONVERSION
+	return selected
+
+
+func _technique_primary_affix_bonus(item: Dictionary) -> Dictionary:
+	var affixes: Array = item.get("affixes", []) as Array
+	var primary_tag: String = str(item.get("primary_cultivation_tag", ""))
+	var selected_affix: Dictionary = {}
+	for affix in affixes:
+		if not affix is Dictionary:
+			continue
+		var affix_data: Dictionary = affix as Dictionary
+		if str(affix_data.get("affix_kind", "")) != "cultivation":
+			continue
+		if selected_affix.is_empty():
+			selected_affix = affix_data
+		if str(affix_data.get("tag", "")) == primary_tag:
+			selected_affix = affix_data
+			break
+	if selected_affix.is_empty():
+		return {}
+	var tag: String = str(selected_affix.get("tag", primary_tag))
+	var raw_affix_bonuses: Dictionary = selected_affix.get("bonuses", {}) as Dictionary
+	var focused: Dictionary = _specialize_technique_bonus_dict(raw_affix_bonuses, tag, TECHNIQUE_MAX_AFFIX_BONUS_KEYS)
+	for bonus_name in focused.keys():
+		focused[bonus_name] = float(focused[bonus_name]) * TECHNIQUE_AFFIX_BONUS_SCALE
+	return focused
 
 
 func _strip_affix_bonuses(raw_bonuses: Dictionary, affixes: Array) -> Dictionary:
@@ -4199,6 +5459,19 @@ func _apply_affixes_to_item(item: Dictionary, item_kind: String) -> void:
 				var companion_key: String = str(companion_bonus_name)
 				companion_bonuses[companion_key] = float(companion_bonuses.get(companion_key, 0.0)) + float(companion_affix_bonuses[companion_bonus_name])
 		item["affix_bonus"] = companion_bonuses
+		return
+	if item_kind == "technique":
+		var primary_tag: String = str(item.get("primary_cultivation_tag", ""))
+		var raw_base: Dictionary = item.get("base_bonuses", item.get("bonuses", {})) as Dictionary
+		var base_bonuses: Dictionary = _specialize_technique_bonus_dict(raw_base, primary_tag, TECHNIQUE_MAX_BASE_BONUS_KEYS)
+		var affix_bonus: Dictionary = _technique_primary_affix_bonus(item)
+		var final_bonuses: Dictionary = base_bonuses.duplicate(true)
+		for bonus_name in affix_bonus:
+			var key: String = str(bonus_name)
+			final_bonuses[key] = float(final_bonuses.get(key, 0.0)) + float(affix_bonus[bonus_name])
+		item["base_bonuses"] = base_bonuses
+		item["affix_bonus"] = affix_bonus
+		item["bonuses"] = _specialize_technique_bonus_dict(final_bonuses, primary_tag, TECHNIQUE_MAX_TOTAL_BONUS_KEYS)
 		return
 	var bonus_key: String = "bonuses" if item_kind == "technique" else "passive_bonus"
 	var bonuses: Dictionary = {}
@@ -4456,6 +5729,11 @@ func _calculate_identity_routes(player: PlayerData) -> Dictionary:
 		routes[sect_name] = route
 	for sect_name in SECT_TYPES:
 		var route_data: Dictionary = routes[str(sect_name)] as Dictionary
+		var event_scores: Dictionary = player.final_attributes.get("sect_event_score_bonus", {}) as Dictionary
+		var event_bonus: float = float(event_scores.get(str(sect_name), 0.0))
+		if not is_zero_approx(event_bonus):
+			route_data["event_bonus"] = event_bonus
+			route_data["score"] = maxf(0.0, float(route_data.get("score", 0.0)) + event_bonus)
 		var score: float = float(route_data.get("score", 0.0))
 		var level: int = get_identity_level_for_score(score)
 		route_data["level"] = level
@@ -4768,6 +6046,8 @@ func _identity_passive_value(player: PlayerData, sect_name: String) -> float:
 	var multiplier: float = _identity_passive_multiplier(level)
 	if multiplier <= 0.0:
 		return 0.0
+	if int(player.final_attributes.get("sect_passive_halved_until", -1)) >= round_number:
+		multiplier *= 0.5
 	var stat_sum: float = float(_identity_stat_sum(player, sect_name))
 	match sect_name:
 		"万魂殿":
@@ -4964,6 +6244,27 @@ func get_cultivation_build_progress(player: PlayerData) -> Dictionary:
 	}
 
 
+func get_cultivation_build_hint(player: PlayerData) -> String:
+	var progress: Dictionary = get_cultivation_build_progress(player)
+	var cultivation_type: String = str(progress.get("cultivation", "散修"))
+	var count: int = int(progress.get("count", 0))
+	var level: int = int(progress.get("level", 0))
+	var level_name: String = str(progress.get("level_name", "未成"))
+	var next_count: int = int(progress.get("next_count", 2))
+	if count <= 0 or cultivation_type == "散修":
+		return "构筑：先装备带同修词条的功法/法宝；4本功法+1件法宝共5件，任意同修2件开机制。"
+	var bond: Dictionary = CULTIVATION_BOND_DATA.get(cultivation_type, {}) as Dictionary
+	var growth: Dictionary = TREASURE_GROWTH.get(cultivation_type, {}) as Dictionary
+	var target_text: String = "已归一"
+	if level <= 0:
+		target_text = "还差" + str(maxi(0, 2 - count)) + "件开质变"
+	elif level < 4:
+		target_text = "下一档还差" + str(maxi(0, next_count - count)) + "件"
+	var mechanic: String = str(bond.get("mechanic", "同修词条触发机制"))
+	var growth_text: String = str(growth.get("trigger", "按对应行为成长"))
+	return "构筑：" + cultivation_type + " " + str(count) + "/" + str(MAX_CULTIVATION_SET_COUNT) + "｜" + level_name + "｜" + target_text + "\n机制：" + mechanic + "\n养成：" + growth_text
+
+
 func get_affix_build_routes(player: PlayerData) -> Dictionary:
 	return _calculate_cultivation_routes(player)
 
@@ -4997,39 +6298,40 @@ func get_affix_description_lines(sect_name: String) -> Array[String]:
 func get_affix_guide_text(sect_name: String, player: PlayerData = null) -> String:
 	var lines: Array[String] = []
 	var is_cultivation: bool = CULTIVATION_TYPES.has(sect_name)
-	lines.append(sect_name + ("修行羁绊" if is_cultivation else "宗门羁绊"))
-	lines.append("")
-	if player != null:
-		var routes: Dictionary = get_affix_build_routes(player) if is_cultivation else _calculate_identity_routes(player)
-		var route: Dictionary = routes.get(sect_name, {}) as Dictionary
-		if is_cultivation:
-			var count: int = int(route.get("count", 0))
-			var level: int = int(route.get("level", 0))
-			lines.append("件数：" + str(count) + "/" + str(MAX_CULTIVATION_SET_COUNT) + "｜阶段 " + str(route.get("level_name", _cultivation_bond_level_name(level))))
-			lines.append("装备来源：功法" + str(int(route.get("techniques", 0))) + " 法宝" + str(int(route.get("treasures", 0))))
-			lines.append("强度：" + _format_score(float(route.get("strength", 0.0))) + "｜品质 " + _format_score(float(route.get("quality", 0.0))))
-			lines.append("下档：" + ("已满" if level >= 4 else str(int(route.get("next_count", 2))) + "件"))
-		else:
-			var score: float = float(route.get("score", 0.0))
-			var total: int = int(route.get("components", 0))
-			var companion_count: int = int(route.get("companions", 0))
-			var quality_score: float = float(route.get("quality", 0.0))
-			var bond_score: int = int(route.get("bond", 0))
-			var identity_level: int = get_identity_level_for_score(score)
-			lines.append("分数：" + _format_score(score) + "｜被动倍率 " + str(_identity_passive_multiplier(identity_level)))
-			lines.append("伙伴：" + str(companion_count) + "位")
-			lines.append("计分：伙伴 " + str(total) + " + 伙伴羁绊 " + str(bond_score) + "×0.5 + 品质 " + _format_score(quality_score))
-			lines.append("下档：" + ("已满" if identity_level >= 5 else _format_score(_identity_next_score(identity_level))))
-		lines.append("")
-
-	lines.append("规则：")
 	if is_cultivation:
-		lines.append("功法和法宝只带修词条；同修2件解锁机制质变，3件、4件强化，5件归一。")
-		lines.append("词条数：炼气/筑基1条，金丹/元婴2条，化神3条，合体4条；多词条组件可同时支持多套修行羁绊。")
+		lines.append(sect_name + "构筑")
+		var route: Dictionary = {}
+		if player != null:
+			route = get_affix_build_routes(player).get(sect_name, {}) as Dictionary
+		var count: int = int(route.get("count", 0))
+		var level: int = int(route.get("level", 0))
+		var next_count: int = int(route.get("next_count", 2))
+		var level_name: String = str(route.get("level_name", _cultivation_bond_level_name(level)))
+		lines.append("当前：" + str(count) + "/" + str(MAX_CULTIVATION_SET_COUNT) + "｜" + level_name + "｜功法" + str(int(route.get("techniques", 0))) + " 法宝" + str(int(route.get("treasures", 0))))
+		lines.append("下一步：" + ("已成套，换高品质/练大成" if level >= 4 else "再找" + str(maxi(0, next_count - count)) + "件" + sect_name))
+		lines.append("")
+		lines.append("成套：同修2件启动，3/4/5件变强。")
+		var bond: Dictionary = CULTIVATION_BOND_DATA.get(sect_name, {}) as Dictionary
+		var mechanic: String = str(bond.get("mechanic", ""))
+		if mechanic != "":
+			lines.append("机制：" + mechanic)
+		var bonuses: Dictionary = bond.get("bonuses", {}) as Dictionary
+		if not bonuses.is_empty():
+			lines.append("效果：" + _set_bonus_effect_summary(bonuses))
 	else:
-		lines.append("只有伙伴带门派词条；宗门分数 = 同门派伙伴数×1 + 同门派伙伴羁绊总和×0.5 + 同门派伙伴品质系数总和")
-	for line in get_affix_description_lines(sect_name):
-		lines.append("· " + line)
+		lines.append(sect_name + "宗门")
+		var identity_route: Dictionary = {}
+		if player != null:
+			identity_route = _calculate_identity_routes(player).get(sect_name, {}) as Dictionary
+		var score: float = float(identity_route.get("score", 0.0))
+		var identity_level: int = get_identity_level_for_score(score)
+		lines.append("当前：" + _format_score(score) + "分｜" + get_identity_level_short(identity_level) + "｜伙伴" + str(int(identity_route.get("companions", 0))) + "位")
+		lines.append("下一步：" + ("已满" if identity_level >= 5 else _format_score(_identity_next_score(identity_level)) + "分"))
+		lines.append("")
+		lines.append("成套：同门伙伴越多、羁绊越高，身份越高。")
+		var passive: Dictionary = SECT_PASSIVE.get(sect_name, {}) as Dictionary
+		if not passive.is_empty():
+			lines.append("被动：" + str(passive.get("desc", "")))
 	return "\n".join(lines)
 
 
@@ -5236,9 +6538,18 @@ func grow_treasure(player: PlayerData, amount: int) -> String:
 		var after_steps: int = int(floor(float(old_value + actual_amount) / 5.0))
 		actual_amount += maxi(0, after_steps - before_steps)
 	var threshold: int = int(treasure.get("awaken_threshold", treasure.get("growth_max", 10)))
+	var already_at_top: bool = (int(treasure.get("awakening_level", 0)) > 0 or bool(treasure.get("awakened", false))) and old_value >= threshold
+	if already_at_top:
+		if bool(treasure.get("max_conversion_done", false)):
+			return ""
+		var top_insight: int = maxi(10, int(round(float(actual_amount) * 8.0 * _quality_power(str(treasure.get("quality", "筑基级"))))))
+		player.ling_li += top_insight
+		treasure["max_conversion_done"] = true
+		return str(treasure.get("name", "法宝")) + "已觉醒，余韵化为修为 +" + str(top_insight)
 	var new_value: int = old_value + actual_amount
 	var awakened_now: bool = old_value < threshold and new_value >= threshold and int(treasure.get("awakening_level", 0)) <= 0
 	if awakened_now:
+		new_value = threshold
 		treasure["awakening_level"] = 1
 		treasure["awakened"] = true
 		if growth_type == "器修":
@@ -5249,6 +6560,8 @@ func grow_treasure(player: PlayerData, amount: int) -> String:
 				var extra_effects: Array = treasure.get("extra_attack_effects", []) as Array
 				extra_effects.append(extra_effect)
 				treasure["extra_attack_effects"] = extra_effects
+	elif new_value > threshold:
+		new_value = threshold
 	treasure["growth_value"] = new_value
 	treasure["growth_changed"] = true
 	var message: String = str(treasure.get("name", "法宝")) + growth_name + " +" + str(new_value - old_value) + "（" + str(new_value) + "/" + str(threshold) + "）"
@@ -5422,6 +6735,26 @@ func grow_bond_with_source(player: PlayerData, companion_name: String, amount: i
 	var max_bond: int = _companion_bond_max(companion_ref) if not companion_ref.is_empty() else 99
 	var stored_bond_default: int = int(companion_ref.get("bond", 0)) if not companion_ref.is_empty() else 0
 	var old_value: int = int(player.companion_bond.get(companion_name, stored_bond_default))
+	if actual_amount < 0 and old_value >= max_bond:
+		player.companion_bond[companion_name] = max_bond
+		if not companion_ref.is_empty():
+			companion_ref["bond"] = max_bond
+			companion_ref["bond_stage"] = 3
+			companion_ref["bond_full_unlocked"] = true
+		return ""
+	if actual_amount > 0 and old_value >= max_bond:
+		player.companion_bond[companion_name] = max_bond
+		if not companion_ref.is_empty():
+			companion_ref["bond"] = max_bond
+			companion_ref["bond_stage"] = 3
+			companion_ref["bond_full_unlocked"] = true
+			if bool(companion_ref.get("max_conversion_done", false)):
+				return ""
+			companion_ref["max_conversion_done"] = true
+		var companion_quality: String = str(companion_ref.get("quality", "筑基级")) if not companion_ref.is_empty() else "筑基级"
+		var bond_insight: int = maxi(8, int(round(float(actual_amount) * 6.0 * _quality_power(companion_quality))))
+		player.ling_li += bond_insight
+		return companion_name + "情义已满，余缘化为修为 +" + str(bond_insight)
 	var new_value: int = clampi(old_value + actual_amount, 0, max_bond)
 	var old_stage: int = get_companion_bond_stage(old_value)
 	var new_stage: int = get_companion_bond_stage(new_value)
@@ -5874,6 +7207,12 @@ func _emotion_school_damage_reduction(player: PlayerData) -> float:
 func prepare_duel() -> Dictionary:
 	check_set_bonus(player_a)
 	check_set_bonus(player_b)
+	var mode: String = duel_mode if duel_mode != "" else "final"
+	var pre_hp_a: int = player_a.qi_xue
+	var pre_hp_b: int = player_b.qi_xue
+	if mode == "sparring":
+		player_a.qi_xue = _get_player_max_hp(player_a)
+		player_b.qi_xue = _get_player_max_hp(player_b)
 	var player_a_stats: Dictionary = calculate_duel_stats(player_a)
 	var player_b_stats: Dictionary = calculate_duel_stats(player_b)
 	var speed_a: float = float(player_a_stats.get("速度", 0)) * rng.randf_range(0.95, 1.05)
@@ -5881,13 +7220,20 @@ func prepare_duel() -> Dictionary:
 	var first_attacker: String = "player_a" if speed_a >= speed_b else "player_b"
 	duel_round_number = 1
 	var first_name: String = player_a.player_name if first_attacker == "player_a" else player_b.player_name
+	var title: String = "论道切磋" if mode == "sparring" else "仙位之争"
+	var opening_log: String = "第" + str(round_number) + "轮论道切磋开启，" + first_name + "先行出招" if mode == "sparring" else "仙位之争开启，" + first_name + "占得先机"
 	duel_data = {
+		"mode": mode,
+		"title": title,
+		"max_rounds": SPARRING_MAX_ACTIONS if mode == "sparring" else 0,
+		"pre_sparring_hp_a": pre_hp_a,
+		"pre_sparring_hp_b": pre_hp_b,
 		"player_a_stats": player_a_stats,
 		"player_b_stats": player_b_stats,
 		"first_attacker": first_attacker,
 		"current_attacker": first_attacker,
 		"round": duel_round_number,
-		"log": ["仙位之争开启，" + first_name + "占得先机"],
+		"log": [opening_log],
 	}
 	return duel_data.duplicate(true)
 
@@ -5926,11 +7272,14 @@ func calculate_duel_stats(player: PlayerData) -> Dictionary:
 	var good_karma: int = _duel_good_karma(player)
 	var build_level: int = int(player.final_attributes.get("cultivation_bond_level", 0))
 	var active_links: Array = []
-	return {
+	var stats: Dictionary = {
 		"攻击力": int(final_stats.get("攻击力", 0)),
 		"防御力": int(final_stats.get("防御力", 0)),
 		"气血": int(final_stats.get("气血", 0)),
+		"当前气血": player.qi_xue,
 		"速度": final_speed,
+		"境界": player.realm,
+		"修为": player.ling_li,
 		"流派": _detect_player_school(player),
 		"构筑层级": build_level,
 		"魅力": int(player.stats.get("魅力", 0)),
@@ -5950,6 +7299,29 @@ func calculate_duel_stats(player: PlayerData) -> Dictionary:
 		"联动列表": active_links,
 		"伙伴列表": player.companions.duplicate(true),
 	}
+	stats["战力"] = _duel_combat_power_from_stats(stats)
+	stats["战力说明"] = get_visible_combat_power_formula_text() + "；修为只决定突破门槛，不直接等于战力。"
+	return stats
+
+
+func _duel_combat_power_from_stats(stats: Dictionary) -> int:
+	return int(round(
+		float(stats.get("攻击力", 0)) * 2.0
+		+ float(stats.get("防御力", 0))
+		+ float(stats.get("当前气血", stats.get("气血", 0))) * 0.5
+		+ float(stats.get("法宝成长", 0))
+		+ float(stats.get("速度", 0)) * 0.2
+	))
+
+
+func _duel_base_power_from_stats(stats: Dictionary) -> int:
+	return int(round(
+		float(stats.get("攻击力", 0)) * 2.0
+		+ float(stats.get("防御力", 0))
+		+ float(stats.get("气血", 0)) * 0.5
+		+ float(stats.get("法宝成长", 0))
+		+ float(stats.get("速度", 0)) * 0.2
+	))
 
 
 func _duel_treasure_growth_power(treasure: Dictionary) -> int:
@@ -5977,11 +7349,12 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 	_apply_duel_start_of_action(attacker, defender, attack_stats, defense_stats, effects)
 	if attacker.qi_xue <= 0:
 		var backlash_log: String = attacker.player_name + "心魔反噬，道心先崩"
-		return {"damage": 0, "实际伤害": 0, "特殊效果触发列表": effects, "日志文字": backlash_log}
+		return {"damage": 0, "实际伤害": 0, "特殊效果触发列表": effects, "日志文字": backlash_log, "明细": effects.duplicate(), "攻击方": attacker.player_name, "防守方": defender.player_name}
 	if defender.qi_xue <= 0:
 		var drain_log: String = defender.player_name + "被道途余势拖入败局"
-		return {"damage": 0, "实际伤害": 0, "特殊效果触发列表": effects, "日志文字": drain_log}
+		return {"damage": 0, "实际伤害": 0, "特殊效果触发列表": effects, "日志文字": drain_log, "明细": effects.duplicate(), "攻击方": attacker.player_name, "防守方": defender.player_name}
 	var attack_value: float = float(attack_stats.get("攻击力", 0))
+	var detail_lines: Array[String] = ["基础攻击 " + str(int(round(attack_value)))]
 	var attacker_treasure: Dictionary = attack_stats.get("法宝", {}) as Dictionary
 	var defender_treasure: Dictionary = defense_stats.get("法宝", {}) as Dictionary
 	var treasure_damage: float = float(attacker_treasure.get("duel_damage", 0.0))
@@ -5992,18 +7365,22 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 	if treasure_damage > 0.0:
 		attack_value += treasure_damage
 		effects.append(str(attacker_treasure.get("name", "法宝")) + "轰击+" + str(int(round(treasure_damage))))
+		detail_lines.append("法宝 +" + str(int(round(treasure_damage))))
 	var ghost_damage: int = _ghost_attack_damage(attacker, true)
 	if ghost_damage > 0:
 		attack_value += ghost_damage
 		effects.append("役鬼助战+" + str(ghost_damage))
+		detail_lines.append("役鬼 +" + str(ghost_damage))
 	var route_bonus: float = _duel_route_attack_bonus(attack_stats)
 	if route_bonus > 0.0:
 		attack_value *= 1.0 + route_bonus
 		effects.append(str(attack_stats.get("流派", "道途")) + "杀势+" + str(int(round(route_bonus * 100.0))) + "%")
+		detail_lines.append(str(attack_stats.get("流派", "道途")) + "杀势 +" + str(int(round(route_bonus * 100.0))) + "%")
 	var emotion_damage: int = int(round(float(attack_stats.get("情修强度", 0.0)) * 0.9 + float(attack_stats.get("魅力", 0)) * 0.45))
 	if emotion_damage > 0:
 		attack_value += emotion_damage
 		effects.append("红尘扰心+" + str(emotion_damage))
+		detail_lines.append("红尘 +" + str(emotion_damage))
 	var defense_value: float = float(defense_stats.get("防御力", 0))
 	var defense_rate: float = minf(0.70, defense_value / (defense_value + 50.0))
 	var ignore_defense: float = _get_duel_effect_value(attack_stats, "碎甲", 0.0)
@@ -6014,6 +7391,9 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 	if _has_link(attack_stats, "蓄势待发"):
 		ignore_defense += 0.20
 	defense_rate = maxf(0.0, defense_rate * (1.0 - ignore_defense))
+	detail_lines.append("防御抵消 " + str(int(round(defense_rate * 100.0))) + "%")
+	if ignore_defense > 0.0:
+		detail_lines.append("破防 " + str(int(round(ignore_defense * 100.0))) + "%")
 
 	var dodge_chance: float = float(defense_stats.get("闪避率", BASE_DODGE_CHANCE))
 	dodge_chance += _get_duel_effect_value(defense_stats, "逍遥游", 0.0)
@@ -6022,8 +7402,9 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 		dodge_chance += 0.05
 	if rng.randf() < clampf(dodge_chance, 0.0, 0.75):
 		effects.append("闪避！")
+		detail_lines.append("闪避率 " + str(int(round(clampf(dodge_chance, 0.0, 0.75) * 100.0))) + "%，本次闪避成功")
 		var dodge_log: String = defender.player_name + "身形一晃，避开了攻击"
-		return {"damage": attack_value, "实际伤害": 0, "特殊效果触发列表": effects, "日志文字": dodge_log, "闪避": true, "暴击": false}
+		return {"damage": attack_value, "实际伤害": 0, "特殊效果触发列表": effects, "日志文字": dodge_log, "闪避": true, "暴击": false, "明细": detail_lines, "攻击方": attacker.player_name, "防守方": defender.player_name}
 
 	var damage: float = maxf(1.0, attack_value * (1.0 - defense_rate))
 	damage *= 1.0 + clampf(float(defense_stats.get("因果", 0)) * 0.025, 0.0, 0.28)
@@ -6031,6 +7412,7 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 	if route_reduction > 0.0:
 		damage *= 1.0 - route_reduction
 		effects.append("道途护身-" + str(int(round(route_reduction * 100.0))) + "%")
+		detail_lines.append("道途护身 -" + str(int(round(route_reduction * 100.0))) + "%")
 	var crit_chance: float = float(attack_stats.get("暴击率", BASE_CRIT_CHANCE))
 	crit_chance += _get_duel_effect_value(attack_stats, "破军", 0.0)
 	crit_chance += _duel_route_crit_bonus(attack_stats)
@@ -6045,12 +7427,16 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 		var crit_multiplier: float = CRIT_DAMAGE_MULTIPLIER + _duel_route_crit_damage_bonus(attack_stats)
 		damage *= crit_multiplier
 		effects.append("暴击！")
+		detail_lines.append("暴击 x" + str(snappedf(crit_multiplier, 0.01)))
+	else:
+		detail_lines.append("暴击率 " + str(int(round(clampf(crit_chance, 0.0, 0.95) * 100.0))) + "%")
 
 	var hurt_reduction: float = float(defender_treasure.get("battle_hurt_reduction", 0.0)) * 0.5
 	hurt_reduction = clampf(hurt_reduction, 0.0, 0.45)
 	if hurt_reduction > 0.0:
 		damage *= 1.0 - hurt_reduction
 		effects.append(str(defender_treasure.get("name", "法宝")) + "护体")
+		detail_lines.append(str(defender_treasure.get("name", "法宝")) + "护体 -" + str(int(round(hurt_reduction * 100.0))) + "%")
 	damage = _apply_duel_gold_body(defender, defense_stats, damage, effects)
 
 	var actual_damage: int = max(1, int(round(damage)))
@@ -6070,6 +7456,7 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 		var heal_value: int = int(round(float(actual_damage) * heal_rate))
 		attacker.qi_xue = mini(int(attack_stats.get("气血", attacker.qi_xue)), attacker.qi_xue + heal_value)
 		effects.append("嗜血回血" + str(heal_value))
+		detail_lines.append("吸血回血 " + str(heal_value))
 
 	var thorn_rate: float = _get_duel_effect_value(defense_stats, "荆棘", 0.0)
 	thorn_rate += float(defense_stats.get("反伤", 0.0))
@@ -6080,11 +7467,13 @@ func execute_duel_round(attacker: PlayerData, defender: PlayerData, attack_stats
 		var reflected: int = int(round(float(actual_damage) * thorn_rate))
 		attacker.qi_xue = maxi(0, attacker.qi_xue - reflected)
 		effects.append("荆棘反弹" + str(reflected))
+		detail_lines.append("反伤 " + str(reflected))
 
 	var log_text: String = attacker.player_name + "造成" + str(actual_damage) + "点伤害"
 	if not effects.is_empty():
 		log_text += "（" + "，".join(effects) + "）"
-	return {"damage": damage, "实际伤害": actual_damage, "特殊效果触发列表": effects, "日志文字": log_text, "暴击": is_crit, "闪避": false}
+	detail_lines.append("最终伤害 " + str(actual_damage))
+	return {"damage": damage, "实际伤害": actual_damage, "特殊效果触发列表": effects, "日志文字": log_text, "暴击": is_crit, "闪避": false, "明细": detail_lines, "攻击方": attacker.player_name, "防守方": defender.player_name}
 
 
 func _apply_duel_start_of_action(attacker: PlayerData, defender: PlayerData, attack_stats: Dictionary, defense_stats: Dictionary, effects: Array) -> void:
@@ -6181,6 +7570,7 @@ func start_duel_if_host() -> void:
 
 func on_duel_data(data: Dictionary) -> void:
 	duel_data = data.duplicate(true)
+	duel_mode = str(duel_data.get("mode", duel_mode))
 	duel_round_number = int(duel_data.get("round", 1))
 	duel_prepared.emit(duel_data)
 
@@ -6198,6 +7588,8 @@ func settle_duel_action() -> void:
 	var round_result: Dictionary = execute_duel_round(attacker, defender, attack_stats, defense_stats)
 	attack_stats["当前气血"] = attacker.qi_xue
 	defense_stats["当前气血"] = defender.qi_xue
+	attack_stats["战力"] = _duel_combat_power_from_stats(attack_stats)
+	defense_stats["战力"] = _duel_combat_power_from_stats(defense_stats)
 	duel_data[attacker_key + "_stats"] = attack_stats
 	duel_data[defender_key + "_stats"] = defense_stats
 
@@ -6216,6 +7608,11 @@ func settle_duel_action() -> void:
 	player_a.duel_rounds.append(round_record.duplicate(true))
 	player_b.duel_rounds.append(round_record.duplicate(true))
 
+	if str(duel_data.get("mode", duel_mode)) == "sparring":
+		if _sparring_should_finish():
+			_finish_stage_sparring()
+			return
+
 	if player_a.qi_xue <= 0 or player_b.qi_xue <= 0:
 		var winner_key: String = "player_b" if player_a.qi_xue <= 0 else "player_a"
 		var loser_key: String = "player_a" if winner_key == "player_b" else "player_b"
@@ -6224,9 +7621,11 @@ func settle_duel_action() -> void:
 		var duel_task_message: String = _complete_active_tasks(winner, "duel_win", {})
 		if duel_task_message != "":
 			logs.append(duel_task_message)
-			duel_data["log"] = logs
 		pending_duel_winner_key = winner_key
 		pending_duel_loser_key = loser_key
+		logs.append(_duel_finish_reason(winner, loser, duel_data.get(winner_key + "_stats", {}) as Dictionary, duel_data.get(loser_key + "_stats", {}) as Dictionary))
+		duel_data["log"] = logs
+		var final_stats: Dictionary = duel_data.duplicate(true)
 		var ending_data: Dictionary = {
 			"winner": winner.player_name,
 			"loser": loser.player_name,
@@ -6235,7 +7634,7 @@ func settle_duel_action() -> void:
 			"winner_peer_id": winner.peer_id,
 			"loser_peer_id": loser.peer_id,
 			"awaiting_final_choice": true,
-			"final_stats": duel_data,
+			"final_stats": final_stats,
 		}
 		duel_data["ending"] = ending_data
 		NetworkManager.send_message("duel_finished", ending_data)
@@ -6249,16 +7648,158 @@ func settle_duel_action() -> void:
 	on_duel_update(duel_data)
 
 
+func _duel_finish_reason(winner: PlayerData, loser: PlayerData, winner_stats: Dictionary, loser_stats: Dictionary) -> String:
+	if winner == null or loser == null:
+		return "胜负已分。"
+	var reasons: Array[String] = []
+	var winner_base_power: int = _duel_base_power_from_stats(winner_stats)
+	var loser_base_power: int = _duel_base_power_from_stats(loser_stats)
+	if winner_base_power > loser_base_power:
+		reasons.append("面板战力更高")
+	elif int(winner_stats.get("战力", 0)) > int(loser_stats.get("战力", 0)):
+		reasons.append("残局气血更稳")
+	if int(winner_stats.get("速度", 0)) > int(loser_stats.get("速度", 0)):
+		reasons.append("速度占优")
+	if int(winner_stats.get("法宝成长", 0)) > int(loser_stats.get("法宝成长", 0)):
+		reasons.append("法宝成长更强")
+	if int(winner_stats.get("构筑层级", 0)) > int(loser_stats.get("构筑层级", 0)):
+		reasons.append("构筑层级更高")
+	if float(winner_stats.get("暴击率", 0.0)) > float(loser_stats.get("暴击率", 0.0)):
+		reasons.append("暴击更高")
+	if float(winner_stats.get("闪避率", 0.0)) > float(loser_stats.get("闪避率", 0.0)):
+		reasons.append("闪避更高")
+	if reasons.is_empty():
+		reasons.append("关键回合打出有效伤害")
+	return "胜负原因：" + winner.player_name + "胜在" + "、".join(reasons) + "。" + get_visible_combat_power_formula_text() + "；修为只决定境界门槛。"
+
+
+func _sparring_should_finish() -> bool:
+	var max_actions: int = int(duel_data.get("max_rounds", SPARRING_MAX_ACTIONS))
+	if duel_round_number >= max_actions:
+		return true
+	if player_a == null or player_b == null:
+		return true
+	if player_a.qi_xue <= 0 or player_b.qi_xue <= 0:
+		return true
+	var stats_a: Dictionary = duel_data.get("player_a_stats", {}) as Dictionary
+	var stats_b: Dictionary = duel_data.get("player_b_stats", {}) as Dictionary
+	var hp_max_a: int = maxi(1, int(stats_a.get("气血", _get_player_max_hp(player_a))))
+	var hp_max_b: int = maxi(1, int(stats_b.get("气血", _get_player_max_hp(player_b))))
+	return float(player_a.qi_xue) / float(hp_max_a) <= SPARRING_LOW_HP_RATE or float(player_b.qi_xue) / float(hp_max_b) <= SPARRING_LOW_HP_RATE
+
+
+func _sparring_winner_key() -> String:
+	var stats_a: Dictionary = duel_data.get("player_a_stats", {}) as Dictionary
+	var stats_b: Dictionary = duel_data.get("player_b_stats", {}) as Dictionary
+	var hp_max_a: int = maxi(1, int(stats_a.get("气血", _get_player_max_hp(player_a))))
+	var hp_max_b: int = maxi(1, int(stats_b.get("气血", _get_player_max_hp(player_b))))
+	var hp_rate_a: float = float(player_a.qi_xue) / float(hp_max_a)
+	var hp_rate_b: float = float(player_b.qi_xue) / float(hp_max_b)
+	if absf(hp_rate_a - hp_rate_b) > 0.02:
+		return "player_a" if hp_rate_a > hp_rate_b else "player_b"
+	var power_a: float = get_visible_combat_power(player_a)
+	var power_b: float = get_visible_combat_power(player_b)
+	if absf(power_a - power_b) > 0.01:
+		return "player_a" if power_a >= power_b else "player_b"
+	return str(duel_data.get("first_attacker", "player_a"))
+
+
+func _duel_player_by_key(key: String) -> PlayerData:
+	return player_a if key == "player_a" else player_b
+
+
+func _restore_sparring_hp() -> void:
+	if player_a != null:
+		player_a.qi_xue = clampi(int(duel_data.get("pre_sparring_hp_a", player_a.qi_xue)), 1, _get_player_max_hp(player_a))
+	if player_b != null:
+		player_b.qi_xue = clampi(int(duel_data.get("pre_sparring_hp_b", player_b.qi_xue)), 1, _get_player_max_hp(player_b))
+
+
+func _finish_stage_sparring() -> void:
+	var winner_key: String = _sparring_winner_key()
+	var loser_key: String = "player_b" if winner_key == "player_a" else "player_a"
+	var winner: PlayerData = _duel_player_by_key(winner_key)
+	var loser: PlayerData = _duel_player_by_key(loser_key)
+	if winner == null or loser == null:
+		return
+	var winner_ling_li: int = 28 + round_number * 6
+	var winner_ling_shi: int = 120 + round_number * 35
+	var loser_ling_li: int = maxi(12, int(round(float(winner_ling_li) * 0.55)))
+	winner.ling_li += winner_ling_li
+	winner.ling_shi += winner_ling_shi
+	loser.ling_li += loser_ling_li
+	loser.forbearance = clampi(loser.forbearance + 1, 0, MAX_FORBEARANCE)
+	var reward_lines: Array[String] = [
+		"切磋点到为止，" + winner.player_name + "占得上风",
+		winner.player_name + "论道收益：修为 +" + str(winner_ling_li) + "，灵石 +" + str(winner_ling_shi),
+		loser.player_name + "败中悟道：修为 +" + str(loser_ling_li) + "，隐忍 +1",
+	]
+	var treasure_message: String = grow_treasure(winner, 1)
+	if treasure_message != "":
+		reward_lines.append(treasure_message)
+	var winner_study_message: String = _grow_techniques_for_cultivation(winner, _detect_player_school(winner), 1, "切磋印证")
+	if winner_study_message != "":
+		reward_lines.append(winner_study_message)
+	var loser_study_message: String = _grow_techniques_for_cultivation(loser, _detect_player_school(loser), 1, "败中悟道")
+	if loser_study_message != "":
+		reward_lines.append(loser_study_message)
+	var logs: Array = duel_data.get("log", []) as Array
+	for line in reward_lines:
+		logs.append(line)
+	duel_data["log"] = logs
+	duel_data["sparring_reward"] = "；".join(reward_lines)
+	_restore_sparring_hp()
+	var final_stats: Dictionary = duel_data.duplicate(true)
+	var ending_data: Dictionary = {
+		"mode": "sparring",
+		"winner": winner.player_name,
+		"loser": loser.player_name,
+		"winner_key": winner_key,
+		"loser_key": loser_key,
+		"winner_peer_id": winner.peer_id,
+		"loser_peer_id": loser.peer_id,
+		"awaiting_final_choice": false,
+		"message": "论道切磋结束",
+		"final_stats": final_stats,
+	}
+	duel_data["ending"] = ending_data
+	NetworkManager.send_message("duel_finished", ending_data)
+	on_duel_finished(ending_data)
+
+
+func on_duel_continue_received(peer_id: int, _data: Dictionary = {}) -> void:
+	if not NetworkManager.is_host:
+		return
+	if current_state != GameState.DUEL or duel_mode != "sparring":
+		return
+	var continue_peer_id: int = peer_id
+	if continue_peer_id <= 0:
+		continue_peer_id = 1
+	duel_continue_votes[continue_peer_id] = true
+	if single_player_mode and continue_peer_id == player_a.peer_id and not duel_continue_votes.has(player_b.peer_id):
+		duel_continue_votes[player_b.peer_id] = true
+	if duel_continue_votes.size() < _lottery_energy_required_count():
+		return
+	duel_continue_votes.clear()
+	_advance_after_sparring()
+
+
 func on_duel_update(data: Dictionary) -> void:
 	duel_data = data.duplicate(true)
 	duel_round_number = int(duel_data.get("round", duel_round_number))
 	duel_updated.emit(duel_data)
+	_auto_save("duel_update")
 
 
 func on_duel_finished(data: Dictionary) -> void:
+	if str(data.get("mode", duel_mode)) == "sparring":
+		duel_finished.emit(data)
+		_auto_save("sparring_finished")
+		return
 	pending_duel_winner_key = str(data.get("winner_key", pending_duel_winner_key))
 	pending_duel_loser_key = str(data.get("loser_key", pending_duel_loser_key))
 	duel_finished.emit(data)
+	_auto_save("duel_finished")
 	if single_player_mode and pending_duel_winner_key == "player_b":
 		_queue_npc_final_choice()
 
@@ -6628,6 +8169,54 @@ func _make_backpack_entry(kind: String, item_data: Dictionary) -> Dictionary:
 	return {"kind": kind, "data": item_data.duplicate(true)}
 
 
+func _make_material_item(material_type: String, quality: String) -> Dictionary:
+	var name: String = _material_name(material_type, quality)
+	return {
+		"name": name,
+		"quality": quality,
+		"material_type": material_type,
+		"effect_desc": _material_effect_desc(material_type),
+	}
+
+
+func _material_name(material_type: String, quality: String) -> String:
+	if material_type == "craft":
+		match quality:
+			"炼气级":
+				return "凡铁矿"
+			"筑基级":
+				return "赤铜矿"
+			"金丹级":
+				return "玄铁"
+			"元婴级":
+				return "星陨铁"
+			"化神级":
+				return "太乙金精"
+			"合体级":
+				return "混元仙金"
+			_:
+				return "矿材"
+	match quality:
+		"炼气级":
+			return "青灵草"
+		"筑基级":
+			return "玄露草"
+		"金丹级":
+			return "金纹芝"
+		"元婴级":
+			return "婴火莲"
+		"化神级":
+			return "紫府参"
+		"合体级":
+			return "九转仙芝"
+		_:
+			return "灵草"
+
+
+func _material_effect_desc(material_type: String) -> String:
+	return "炼器材料，用于淬炼上场法宝" if material_type == "craft" else "炼丹材料，用于开炉炼丹"
+
+
 func _backpack_kind_count(player: PlayerData, kind: String) -> int:
 	if player == null:
 		return 0
@@ -6646,12 +8235,14 @@ func get_backpack_kind_limit(kind: String) -> int:
 			return MAX_BACKPACK_TREASURES
 		"companion":
 			return MAX_BACKPACK_COMPANIONS
+		"material":
+			return MAX_BACKPACK_MATERIALS
 		_:
 			return 0
 
 
 func get_total_backpack_capacity() -> int:
-	return MAX_BACKPACK_TECHNIQUES + MAX_BACKPACK_TREASURES + MAX_BACKPACK_COMPANIONS
+	return MAX_BACKPACK_CAPACITY
 
 
 func get_backpack_counts(player: PlayerData) -> Dictionary:
@@ -6659,12 +8250,13 @@ func get_backpack_counts(player: PlayerData) -> Dictionary:
 		"technique": _backpack_kind_count(player, "technique"),
 		"treasure": _backpack_kind_count(player, "treasure"),
 		"companion": _backpack_kind_count(player, "companion"),
+		"material": _backpack_kind_count(player, "material"),
 	}
 
 
 func get_backpack_counts_text(player: PlayerData) -> String:
 	var counts: Dictionary = get_backpack_counts(player)
-	return "功法 " + str(int(counts.get("technique", 0))) + "/" + str(MAX_BACKPACK_TECHNIQUES) + "  法宝 " + str(int(counts.get("treasure", 0))) + "/" + str(MAX_BACKPACK_TREASURES) + "  伙伴 " + str(int(counts.get("companion", 0))) + "/" + str(MAX_BACKPACK_COMPANIONS)
+	return "功法 " + str(int(counts.get("technique", 0))) + "/" + str(MAX_BACKPACK_TECHNIQUES) + "  法宝 " + str(int(counts.get("treasure", 0))) + "/" + str(MAX_BACKPACK_TREASURES) + "  伙伴 " + str(int(counts.get("companion", 0))) + "/" + str(MAX_BACKPACK_COMPANIONS) + "  材料 " + str(int(counts.get("material", 0))) + "/" + str(MAX_BACKPACK_MATERIALS)
 
 
 func can_store_backpack_kind(player: PlayerData, kind: String) -> bool:
@@ -6734,8 +8326,8 @@ func _player_backpack_issue(player: PlayerData) -> String:
 	if player == null:
 		return ""
 	if pending_backpack_items.has(str(player.peer_id)):
-		return "还有待处理组件，请装备、丢弃或倒卖后再继续"
-	for kind in ["technique", "treasure", "companion"]:
+		return "还有待处理组件，请装备或丢弃后再继续"
+	for kind in ["technique", "treasure", "companion", "material"]:
 		var count: int = _backpack_kind_count(player, kind)
 		var limit: int = get_backpack_kind_limit(kind)
 		if count > limit:
@@ -6854,9 +8446,12 @@ func _add_technique_fragment_progress(player: PlayerData, technique: Dictionary,
 	var before_realm: String = str(technique.get("technique_realm", "初窥"))
 	var next_realm: String = _next_technique_realm(before_realm)
 	if next_realm == before_realm:
+		if bool(technique.get("max_conversion_done", false)):
+			return ""
 		var quality: String = str(technique.get("quality", "筑基级"))
 		var insight: int = maxi(12, int(round(18.0 * _quality_power(quality))))
 		player.ling_li += insight
+		technique["max_conversion_done"] = true
 		return "《" + technique_name + "》已至大成，" + source + "化为修为 +" + str(insight)
 
 	var progress: int = int(technique.get("realm_progress", 0)) + maxi(1, amount)
@@ -7003,6 +8598,8 @@ func _item_kind_name(kind: String) -> String:
 			return "法宝"
 		"companion":
 			return "同伴"
+		"material":
+			return "材料"
 		_:
 			return "物品"
 
@@ -7055,6 +8652,29 @@ func _store_equipment_item(player: PlayerData, kind: String, item_data: Dictiona
 
 	pending_backpack_items[str(player.peer_id)] = entry
 	return _collection_message(player, "背包已满：" + _backpack_item_label(entry) + "暂未收入，请先清理")
+
+
+func _store_material_item(player: PlayerData, material_type: String, quality: String) -> String:
+	if player == null:
+		return "材料失落"
+	var material: Dictionary = _make_material_item(material_type, quality)
+	return _store_material_data(player, material)
+
+
+func _store_material_data(player: PlayerData, material: Dictionary) -> String:
+	if player == null or material.is_empty():
+		return "材料失落"
+	var entry: Dictionary = _make_backpack_entry("material", material)
+	var limit: int = get_backpack_kind_limit("material")
+	if limit <= 0:
+		return _collection_message(player, _backpack_item_label(entry) + "暂不能收入背包")
+	var over_limit: bool = _backpack_kind_count(player, "material") >= limit
+	player.backpack.append(entry)
+	player.backpack_capacity = get_total_backpack_capacity()
+	var message: String = _backpack_item_label(entry) + "收入背包"
+	if over_limit:
+		message += "（材料已超出上限，请打开背包清理）"
+	return _collection_message(player, message)
 
 
 func _try_store_pending_backpack_item(player: PlayerData) -> String:
@@ -7167,6 +8787,7 @@ func on_backpack_action_received(peer_id: int, data: Dictionary) -> void:
 	var update_data: Dictionary = _backpack_update_data(peer_id, message)
 	NetworkManager.send_message("backpack_updated", update_data)
 	on_backpack_updated(update_data)
+	_auto_save("backpack")
 
 
 func _backpack_update_data(peer_id: int, message: String) -> Dictionary:
@@ -7203,25 +8824,37 @@ func on_market_action_received(peer_id: int, data: Dictionary) -> void:
 			message = buy_market_heal(player)
 		"dan":
 			message = buy_market_dan(player)
+		"alchemy":
+			message = perform_alchemy(player, str(data.get("grade", "good")))
+		"refining":
+			message = perform_refining(player, str(data.get("grade", "good")))
 		"backpack":
 			message = buy_market_backpack(player)
 		_:
 			message = "未知坊市交易"
 
-	var update_data: Dictionary = _market_update_data(peer_id, message)
+	var update_data: Dictionary = _market_update_data(peer_id, message, {
+		"action": action,
+		"grade": str(data.get("grade", "")),
+		"material_name": str(data.get("material_name", "")),
+	})
 	NetworkManager.send_message("market_updated", update_data)
 	on_market_updated(update_data)
+	_auto_save("market")
 	check_duel_trigger()
 
 
-func _market_update_data(peer_id: int, message: String) -> Dictionary:
-	return {
+func _market_update_data(peer_id: int, message: String, extra_data: Dictionary = {}) -> Dictionary:
+	var result: Dictionary = {
 		"peer_id": peer_id,
 		"message": message,
 		"player_a": _player_snapshot(player_a),
 		"player_b": _player_snapshot(player_b),
 		"pending_backpack_items": pending_backpack_items.duplicate(true),
 	}
+	for key in extra_data:
+		result[key] = extra_data[key]
+	return result
 
 
 func on_market_updated(data: Dictionary) -> void:
@@ -7239,18 +8872,19 @@ func on_auction_action_received(peer_id: int, data: Dictionary) -> void:
 
 	var action_peer_id: int = peer_id
 	if action_peer_id <= 0:
-		action_peer_id = 1
+		action_peer_id = player_a.peer_id if player_a != null and player_a.peer_id > 0 else 1
 	auction_choices[str(action_peer_id)] = data.duplicate(true)
-	if single_player_mode and action_peer_id == player_a.peer_id and not auction_choices.has(str(player_b.peer_id)):
+	if single_player_mode and player_b != null and action_peer_id != player_b.peer_id and not auction_choices.has(str(player_b.peer_id)):
 		_queue_npc_auction_action()
 
-	var total_required: int = _lottery_energy_required_count()
+	var total_required: int = _auction_peer_ids().size()
 	if auction_choices.size() < total_required:
 		return
 	_settle_current_auction()
 
 
 func _settle_current_auction() -> void:
+	_ensure_current_auction_lots()
 	var auction_index: int = int(current_auction.get("index", current_card_index))
 	var card: Dictionary = (current_auction.get("card", {}) as Dictionary).duplicate(true)
 	var lots: Array = (current_auction.get("lots", []) as Array).duplicate(true)
@@ -7263,7 +8897,7 @@ func _settle_current_auction() -> void:
 		var mode: String = str(choice.get("mode", "pass"))
 		var lot_index: int = int(choice.get("lot_index", -1))
 		if mode == "pass" or lot_index < 0 or lot_index >= lots.size():
-			messages[str(peer_id)] = "你在拍卖会观望了一轮"
+			messages[str(peer_id)] = "你在坊市观望了一轮"
 			continue
 		if not lot_claims.has(lot_index):
 			lot_claims[lot_index] = []
@@ -7279,7 +8913,7 @@ func _settle_current_auction() -> void:
 			var claim_data: Dictionary = claim as Dictionary
 			var claim_peer_id: int = int(claim_data.get("peer_id", 0))
 			if claim_peer_id != winner_peer_id:
-				messages[str(claim_peer_id)] = "竞价失败：" + str(lot.get("name", "拍品")) + "被对方拍走"
+				messages[str(claim_peer_id)] = "出价落空：" + str(lot.get("name", "货品")) + "被对方买走"
 		messages[str(winner_peer_id)] = _complete_auction_purchase(winner_peer_id, lot, winner.get("choice", {}) as Dictionary, claims.size() > 1)
 
 	card["settled"] = true
@@ -7360,7 +8994,7 @@ func _choose_auction_winner(claims: Array) -> Dictionary:
 func _complete_auction_purchase(peer_id: int, lot: Dictionary, choice: Dictionary, contested: bool) -> String:
 	var player: PlayerData = get_player_by_peer(peer_id)
 	if player == null:
-		return "拍卖失败：未找到买家"
+		return "坊市交易失败：未找到买家"
 
 	var price: int = int(lot.get("price", 0))
 	var mode: String = str(choice.get("mode", "bid"))
@@ -7373,17 +9007,17 @@ func _complete_auction_purchase(peer_id: int, lot: Dictionary, choice: Dictionar
 		price = _auction_business_price(player, price)
 
 	if not _spend_ling_shi(player, price):
-		return "拍卖失败：灵石不足，" + str(lot.get("name", "拍品")) + "需要 " + str(price)
+		return "坊市交易失败：灵石不足，" + str(lot.get("name", "货品")) + "需要 " + str(price)
 
 	var effect_message: String = _apply_auction_lot(player, lot)
-	var verb: String = "讲价购得" if mode == "haggle" else "竞拍得手"
+	var verb: String = "讲价购得" if mode == "haggle" else "出价购得"
 	player.ji_yuan_list.append({
-		"desc": "拍卖会：" + str(lot.get("name", "拍品")),
+		"desc": "坊市：" + str(lot.get("name", "货品")),
 		"quality": str(lot.get("quality", "")),
-		"type": "拍卖会",
+		"type": "坊市",
 		"effect_value": price,
 	})
-	return verb + "【" + str(lot.get("name", "拍品")) + "】，花费 " + str(price) + " 灵石；" + effect_message
+	return verb + "【" + str(lot.get("name", "货品")) + "】，花费 " + str(price) + " 灵石；" + effect_message
 
 
 func _auction_haggled_price(player: PlayerData, price: int) -> int:
@@ -7407,7 +9041,7 @@ func _apply_auction_lot(player: PlayerData, lot: Dictionary) -> String:
 			var amount: int = int(lot.get("value", MARKET_CULTIVATION_GAIN))
 			player.ling_li += amount
 			var cultivation_message: String = _append_stage_change_to_message(player, before_stage, "修为 +" + str(amount))
-			var sword_message: String = _add_growth_sword_exp(player, maxi(1, int(round(float(amount) / 20.0))), "拍得灵药")
+			var sword_message: String = _add_growth_sword_exp(player, maxi(1, int(round(float(amount) / 20.0))), "坊市灵药")
 			if sword_message != "":
 				cultivation_message += "；" + sword_message
 			return cultivation_message
@@ -7420,7 +9054,7 @@ func _apply_auction_lot(player: PlayerData, lot: Dictionary) -> String:
 			return _grant_breakthrough_dan(player)
 		"backpack":
 			player.backpack_capacity = get_total_backpack_capacity()
-			return "背包上限已固定：功法8 / 法宝4 / 伙伴6"
+			return "背包上限已固定：功法8 / 法宝4 / 伙伴6 / 材料8"
 			if player.backpack_capacity >= MAX_BACKPACK_CAPACITY:
 				return "背包已达上限 " + str(MAX_BACKPACK_CAPACITY)
 			player.backpack_capacity = mini(MAX_BACKPACK_CAPACITY, player.backpack_capacity + 1)
@@ -7446,7 +9080,17 @@ func _apply_auction_lot(player: PlayerData, lot: Dictionary) -> String:
 				companion_data.erase("bond_stage")
 				companion_data.erase("bond_full_unlocked")
 			return _gain_companion_or_ghost(player, companion_data)
-	return "拍品无事发生"
+		"alchemy_material":
+			var herb_data: Dictionary = (lot.get("item_data", {}) as Dictionary).duplicate(true)
+			if herb_data.is_empty():
+				herb_data = _make_material_item("alchemy", quality)
+			return _store_material_data(player, herb_data)
+		"craft_material":
+			var ore_data: Dictionary = (lot.get("item_data", {}) as Dictionary).duplicate(true)
+			if ore_data.is_empty():
+				ore_data = _make_material_item("craft", quality)
+			return _store_material_data(player, ore_data)
+	return "货品无事发生"
 
 
 func buy_market_cultivation(player: PlayerData) -> String:
@@ -7498,10 +9142,306 @@ func buy_market_dan(player: PlayerData) -> String:
 	return "坊市购得" + dan_name if technique_message == "" else "坊市购得" + dan_name + "；" + technique_message
 
 
+func get_alchemy_status(player: PlayerData) -> Dictionary:
+	var status: Dictionary = {
+		"can": false,
+		"cost": 0,
+		"label": "炼丹",
+		"dan_name": "",
+		"material_name": "",
+		"material_count": 0,
+		"stat_score": _craft_stat_score(player, "alchemy"),
+		"stat_text": _craft_stat_text("alchemy"),
+		"reason": "",
+	}
+	if player == null:
+		status["reason"] = "未找到修士"
+		return status
+	if _is_alchemy_blocked():
+		status["reason"] = "此时不能开炉"
+		return status
+	var material: Dictionary = _peek_material(player, "alchemy")
+	status["material_count"] = _material_count(player, "alchemy")
+	if material.is_empty():
+		status["reason"] = "缺少灵草"
+		return status
+	status["material_name"] = str(material.get("name", "灵草"))
+
+	var dan_name: String = _next_required_dan_name(player)
+	if dan_name != "" and not has_dan(player, dan_name):
+		status["label"] = "炼" + dan_name
+		status["dan_name"] = dan_name
+	else:
+		status["label"] = "炼回春丹"
+	status["can"] = true
+	return status
+
+
+func get_refining_status(player: PlayerData) -> Dictionary:
+	var status: Dictionary = {
+		"can": false,
+		"cost": 0,
+		"label": "炼器",
+		"material_name": "",
+		"material_count": 0,
+		"stat_score": _craft_stat_score(player, "refining"),
+		"stat_text": _craft_stat_text("refining"),
+		"reason": "",
+	}
+	if player == null:
+		status["reason"] = "未找到修士"
+		return status
+	if _is_alchemy_blocked():
+		status["reason"] = "此时不能开炉"
+		return status
+	var material: Dictionary = _peek_material(player, "craft")
+	status["material_count"] = _material_count(player, "craft")
+	if material.is_empty():
+		status["reason"] = "缺少矿材"
+		return status
+	status["material_name"] = str(material.get("name", "矿材"))
+	var treasure: Dictionary = _get_equipped_treasure(player)
+	if treasure.is_empty():
+		status["reason"] = "先装备法宝"
+		return status
+	status["label"] = "炼器"
+	status["can"] = true
+	return status
+
+
+func perform_alchemy(player: PlayerData, craft_grade: String = "good") -> String:
+	var status: Dictionary = get_alchemy_status(player)
+	if not bool(status.get("can", false)):
+		var reason: String = str(status.get("reason", "暂时不能炼丹"))
+		return reason + "，先去抽灵草"
+	var material: Dictionary = _consume_material(player, "alchemy")
+	if material.is_empty():
+		return "缺少灵草，无法开炉"
+
+	var grade: String = _normalize_craft_grade(craft_grade)
+	var quality: String = str(material.get("quality", "炼气级"))
+	var craft_quality: Dictionary = _craft_result_quality(player, "alchemy", quality, grade)
+	var result_quality: String = str(craft_quality.get("quality", quality))
+	var power: float = _quality_power(result_quality)
+	var messages: Array[String] = [_craft_grade_text(grade) + "，耗去" + str(material.get("name", "灵草")) + "；" + _craft_quality_message(craft_quality)]
+	var dan_name: String = str(status.get("dan_name", ""))
+	if grade == "miss":
+		var before_miss_stage: String = get_cultivation_stage_name(player)
+		var miss_gain: int = maxi(6, int(round(8.0 * power)))
+		player.ling_li += miss_gain
+		messages.append(_append_stage_change_to_message(player, before_miss_stage, "丹火走偏，残丹化修为 +" + str(miss_gain)))
+	elif dan_name != "":
+		var dans: Array = player.final_attributes.get("dans", []) as Array
+		if not dans.has(dan_name):
+			dans.append(dan_name)
+		player.final_attributes["dans"] = dans
+		messages.append(result_quality + "·" + dan_name + "成丹")
+		var dan_ling_gain: int = maxi(4, int(round((6.0 if grade == "good" else 12.0) * power)))
+		var before_dan_stage: String = get_cultivation_stage_name(player)
+		player.ling_li += dan_ling_gain
+		messages.append(_append_stage_change_to_message(player, before_dan_stage, "丹香入脉，修为 +" + str(dan_ling_gain)))
+	else:
+		var max_hp: int = _get_player_max_hp(player)
+		var old_hp: int = player.qi_xue
+		var grade_rate: float = 1.45 if grade == "perfect" else 1.0
+		var heal_amount: int = maxi(1, int(round(float(max_hp) * ALCHEMY_HEAL_PCT * grade_rate)))
+		player.qi_xue = mini(max_hp, player.qi_xue + heal_amount)
+		var before_stage: String = get_cultivation_stage_name(player)
+		var ling_li_gain: int = maxi(1, int(round(float(ALCHEMY_LING_LI_GAIN) * power * grade_rate)))
+		player.ling_li += ling_li_gain
+		var healed: int = player.qi_xue - old_hp
+		var hp_text: String = "气血 +" + str(healed) if healed > 0 else "气血已满"
+		var recover_text: String = "回春丹成，" + hp_text + "，修为 +" + str(ling_li_gain)
+		messages.append(_append_stage_change_to_message(player, before_stage, recover_text))
+
+	var quality_bonus: int = maxi(0, _quality_rank(result_quality) - _quality_rank(quality))
+	var treasure_growth: int = (1 if grade == "miss" else (5 if grade == "perfect" else 3)) + quality_bonus
+	var technique_growth: int = (1 if grade != "perfect" else 2) + (1 if quality_bonus >= 2 else 0)
+	var treasure_message: String = _grow_treasure_for_cultivation(player, "丹修", treasure_growth)
+	if treasure_message != "":
+		messages.append(treasure_message)
+	var technique_message: String = _grow_techniques_for_cultivation(player, "丹修", technique_growth, "开炉炼丹")
+	if technique_message != "":
+		messages.append(technique_message)
+	return "；".join(messages)
+
+
+func perform_refining(player: PlayerData, craft_grade: String = "good") -> String:
+	var status: Dictionary = get_refining_status(player)
+	if not bool(status.get("can", false)):
+		return str(status.get("reason", "暂时不能炼器")) + "，先备矿材和法宝"
+	var material: Dictionary = _consume_material(player, "craft")
+	if material.is_empty():
+		return "缺少矿材，无法炼器"
+	var grade: String = _normalize_craft_grade(craft_grade)
+	var quality: String = str(material.get("quality", "炼气级"))
+	var craft_quality: Dictionary = _craft_result_quality(player, "refining", quality, grade)
+	var result_quality: String = str(craft_quality.get("quality", quality))
+	var power: int = maxi(1, int(round(_quality_power(result_quality))))
+	var growth_amount: int = 1
+	if grade == "good":
+		growth_amount = 3 + int(floor(float(power) * 0.5))
+	elif grade == "perfect":
+		growth_amount = 5 + power
+	var quality_bonus: int = maxi(0, _quality_rank(result_quality) - _quality_rank(quality))
+	growth_amount += quality_bonus
+	var messages: Array[String] = [_craft_grade_text(grade) + "，耗去" + str(material.get("name", "矿材")) + "；" + _craft_quality_message(craft_quality)]
+	var treasure_message: String = grow_treasure(player, growth_amount)
+	if treasure_message != "":
+		messages.append(treasure_message)
+	var technique_growth: int = (1 if grade != "perfect" else 2) + (1 if quality_bonus >= 2 else 0)
+	var technique_message: String = _grow_techniques_for_cultivation(player, "器修", technique_growth, "开炉炼器")
+	if technique_message != "":
+		messages.append(technique_message)
+	return "；".join(messages)
+
+
+func _material_count(player: PlayerData, material_type: String) -> int:
+	if player == null:
+		return 0
+	var count: int = 0
+	for entry in player.backpack:
+		if not entry is Dictionary:
+			continue
+		var entry_data: Dictionary = entry as Dictionary
+		if str(entry_data.get("kind", "")) != "material":
+			continue
+		var data: Dictionary = entry_data.get("data", {}) as Dictionary
+		if str(data.get("material_type", "")) == material_type:
+			count += 1
+	return count
+
+
+func _peek_material(player: PlayerData, material_type: String) -> Dictionary:
+	var index: int = _find_material_index(player, material_type)
+	if index < 0:
+		return {}
+	var entry: Dictionary = player.backpack[index] as Dictionary
+	return (entry.get("data", {}) as Dictionary).duplicate(true)
+
+
+func _consume_material(player: PlayerData, material_type: String) -> Dictionary:
+	var index: int = _find_material_index(player, material_type)
+	if index < 0:
+		return {}
+	var entry: Dictionary = player.backpack[index] as Dictionary
+	player.backpack.remove_at(index)
+	return (entry.get("data", {}) as Dictionary).duplicate(true)
+
+
+func _find_material_index(player: PlayerData, material_type: String) -> int:
+	if player == null:
+		return -1
+	var best_index: int = -1
+	var best_rank: int = 999
+	for i in range(player.backpack.size()):
+		var entry_value: Variant = player.backpack[i]
+		if not entry_value is Dictionary:
+			continue
+		var entry: Dictionary = entry_value as Dictionary
+		if str(entry.get("kind", "")) != "material":
+			continue
+		var data: Dictionary = entry.get("data", {}) as Dictionary
+		if str(data.get("material_type", "")) != material_type:
+			continue
+		var rank: int = _quality_rank(str(data.get("quality", "炼气级")))
+		if rank < best_rank:
+			best_rank = rank
+			best_index = i
+	return best_index
+
+
+func _craft_related_stats(craft_mode: String) -> Array:
+	return REFINING_RELATED_STATS if craft_mode == "refining" else ALCHEMY_RELATED_STATS
+
+
+func _craft_stat_score(player: PlayerData, craft_mode: String) -> int:
+	if player == null:
+		return 0
+	var total: int = 0
+	for stat_name in _craft_related_stats(craft_mode):
+		total += int(player.stats.get(str(stat_name), 0))
+	return total
+
+
+func _craft_stat_text(craft_mode: String) -> String:
+	var names: Array[String] = []
+	for stat_name in _craft_related_stats(craft_mode):
+		names.append(str(stat_name))
+	return "+".join(names)
+
+
+func _craft_result_quality(player: PlayerData, craft_mode: String, material_quality: String, craft_grade: String) -> Dictionary:
+	var grade: String = _normalize_craft_grade(craft_grade)
+	var stat_score: int = _craft_stat_score(player, craft_mode)
+	var start_rank: int = _quality_rank(material_quality)
+	var rank: int = start_rank
+	match grade:
+		"miss":
+			rank -= 1
+		"perfect":
+			rank += 1
+		_:
+			rank += 0
+	var stat_upgrade_chance: float = _craft_stat_upgrade_chance(stat_score, grade)
+	var stat_upgraded: bool = rng.randf() < stat_upgrade_chance
+	if stat_upgraded:
+		rank += 1
+	rank = clampi(rank, 0, QUALITY_ORDER.size() - 1)
+	return {
+		"quality": _quality_by_rank(rank),
+		"material_quality": material_quality,
+		"grade": grade,
+		"stat_score": stat_score,
+		"stat_text": _craft_stat_text(craft_mode),
+		"stat_upgrade_chance": stat_upgrade_chance,
+		"stat_upgraded": stat_upgraded,
+	}
+
+
+func _craft_stat_upgrade_chance(stat_score: int, craft_grade: String) -> float:
+	var score_bonus: float = float(maxi(0, stat_score)) * 0.025
+	match craft_grade:
+		"perfect":
+			return clampf(0.20 + score_bonus, 0.0, 0.78)
+		"miss":
+			return clampf(float(maxi(0, stat_score)) * 0.012, 0.0, 0.22)
+		_:
+			return clampf(0.04 + score_bonus, 0.0, 0.55)
+
+
+func _craft_quality_message(craft_quality: Dictionary) -> String:
+	var quality: String = str(craft_quality.get("quality", "炼气级"))
+	var stat_text: String = str(craft_quality.get("stat_text", "六维"))
+	var stat_score: int = int(craft_quality.get("stat_score", 0))
+	var upgraded_text: String = "，六维提品" if bool(craft_quality.get("stat_upgraded", false)) else ""
+	return "成色：" + quality + "（" + stat_text + "=" + str(stat_score) + upgraded_text + "）"
+
+
+func _normalize_craft_grade(craft_grade: String) -> String:
+	if craft_grade == "perfect" or craft_grade == "miss":
+		return craft_grade
+	return "good"
+
+
+func _craft_grade_text(craft_grade: String) -> String:
+	match craft_grade:
+		"perfect":
+			return "炉火正妙"
+		"miss":
+			return "炉火失衡"
+		_:
+			return "火候已成"
+
+
+func _is_alchemy_blocked() -> bool:
+	return current_state == GameState.STAT_ALLOCATION or current_state == GameState.CONTEST or current_state == GameState.AUCTION or current_state == GameState.BATTLE or current_state == GameState.BREAKTHROUGH or current_state == GameState.TRIBULATION or current_state == GameState.DUEL or current_state == GameState.SECT_EVENT or current_state == GameState.ENDING
+
+
 func buy_market_backpack(player: PlayerData) -> String:
 	if player != null:
 		player.backpack_capacity = get_total_backpack_capacity()
-	return "背包上限已固定：功法8 / 法宝4 / 伙伴6"
+	return "背包上限已固定：功法8 / 法宝4 / 伙伴6 / 材料8"
 	if player.backpack_capacity >= MAX_BACKPACK_CAPACITY:
 		return "背包已达上限 " + str(MAX_BACKPACK_CAPACITY)
 	if not _spend_ling_shi(player, MARKET_BACKPACK_COST):
@@ -7570,20 +9510,18 @@ func sell_pending_backpack_item(player: PlayerData) -> String:
 	return _collection_message(player, "倒卖" + label + "，灵石 +" + str(value))
 
 
+func get_market_sell_value_for_entry(player: PlayerData, entry: Dictionary) -> int:
+	return _sell_value_for_entry(player, entry)
+
+
 func _sell_value_for_entry(player: PlayerData, entry: Dictionary) -> int:
 	var kind: String = str(entry.get("kind", ""))
 	var data: Dictionary = entry.get("data", {}) as Dictionary
 	var quality: String = str(data.get("quality", "筑基级"))
-	var base_value: int = 120
-	match kind:
-		"technique":
-			base_value = 260
-		"treasure":
-			base_value = 240
-		"companion":
-			base_value = 120
+	var market_kind: String = _market_kind_for_entry_kind(kind, data)
+	var base_value: int = maxi(1, int(round(float(_market_base_price(market_kind)) * 0.48)))
 	var multiplier: float = float(QUALITY_MULTIPLIER.get(quality, 1.0))
-	var business_bonus: float = 1.0 + float(player.stats.get("经商", 0)) * 0.08
+	var business_bonus: float = 1.0 + float(player.stats.get("经商", 0)) * 0.08 if player != null else 1.0
 	return maxi(1, int(round(float(base_value) * multiplier * business_bonus)))
 
 
@@ -7835,10 +9773,14 @@ func generate_desc(data: Dictionary, is_calamity: bool = false) -> String:
 		"ling_shi":
 			return type_name + "：灵石 +" + str(int(value))
 		"auction":
-			return "拍卖会：灵石 +" + str(int(value)) + "，可竞拍功法/法宝/伙伴"
+			return "坊市：灵石 +" + str(int(value)) + "，可买功法/法宝/伙伴/材料"
 		"quest":
 			var quest: Dictionary = data.get("quest", {}) as Dictionary
 			return "悬赏令：" + str(quest.get("name", "未知任务")) + "，" + str(quest.get("desc", "待完成"))
+		"alchemy_material":
+			return quality_text + " · 灵草：收入背包，可用于炼丹"
+		"craft_material":
+			return quality_text + " · 矿材：收入背包，可用于炼器"
 		"adventure":
 			return "秘境探索：可能获得修为、灵石、功法或法宝"
 		"body_tempering":
@@ -8002,6 +9944,12 @@ func _apply_ji_yuan(player: PlayerData, ji_yuan: Dictionary, ji_yuan_value: floa
 			if treasure.is_empty():
 				treasure = generate_treasure_for_player(player, str(ji_yuan.get("quality", "")))
 			message = _store_equipment_item(player, "treasure", treasure)
+			value = 1.0
+		"alchemy_material":
+			message = _store_material_item(player, "alchemy", str(ji_yuan.get("quality", "炼气级")))
+			value = 1.0
+		"craft_material":
+			message = _store_material_item(player, "craft", str(ji_yuan.get("quality", "炼气级")))
 			value = 1.0
 		"dan":
 			if value >= 0.2:
@@ -8271,6 +10219,158 @@ func _battle_player_defense(player: PlayerData) -> float:
 	return maxf(0.0, float(stats.get("防御力", player.defense)))
 
 
+func _estimate_battle_action_damage(player: PlayerData) -> float:
+	if player == null or player.qi_xue <= 0:
+		return 0.0
+	var treasure: Dictionary = _get_equipped_treasure(player)
+	if not treasure.is_empty():
+		_prepare_treasure(treasure, _player_sect(player))
+	var treasure_damage: float = float(_treasure_effective_attack(treasure)) if not treasure.is_empty() else 0.0
+	var attack_bonus: float = 1.0 + _sum_player_bonus(player, "攻击力") + _sum_player_bonus(player, "全属性")
+	attack_bonus += _body_school_attack_bonus(player)
+	attack_bonus += _emotion_school_attack_bonus(player) * 0.75
+	var damage: float = (3.0 + treasure_damage + _battle_player_attack(player) * BATTLE_ATTACK_DAMAGE_SCALE) * attack_bonus
+	damage += _identity_passive_value(player, "天剑阁")
+	damage += float(_ghost_attack_damage(player, false))
+	var sword_level: int = _cultivation_route_level(player, "剑修")
+	if sword_level >= 1:
+		damage *= 1.0 + 0.22 + float(sword_level) * 0.06
+	return maxf(1.0, damage)
+
+
+func _party_expected_battle_damage() -> float:
+	var total: float = 0.0
+	total += _estimate_battle_action_damage(player_a)
+	total += _estimate_battle_action_damage(player_b)
+	return maxf(1.0, total)
+
+
+func _party_average_max_hp() -> float:
+	var total_hp: float = 0.0
+	var count: int = 0
+	if player_a != null and player_a.qi_xue > 0:
+		total_hp += float(_get_player_max_hp(player_a))
+		count += 1
+	if player_b != null and player_b.qi_xue > 0:
+		total_hp += float(_get_player_max_hp(player_b))
+		count += 1
+	if count <= 0:
+		return 80.0
+	return total_hp / float(count)
+
+
+func _enemy_required_build_level(enemy_quality: String = "") -> int:
+	var quality: String = enemy_quality
+	if quality == "" and not current_enemy.is_empty():
+		quality = str(current_enemy.get("quality", "筑基级"))
+	match quality:
+		"炼气级", "筑基级":
+			return 0
+		"金丹级":
+			return 1
+		"元婴级":
+			return 2
+		"化神级":
+			return 3
+		"合体级":
+			return 4
+		_:
+			return clampi(_quality_rank(quality) - 1, 0, 4)
+
+
+func _player_build_level(player: PlayerData) -> int:
+	if player == null:
+		return 0
+	check_set_bonus(player)
+	return int(player.final_attributes.get("cultivation_bond_level", 0))
+
+
+func _party_best_build_level() -> int:
+	return maxi(_player_build_level(player_a), _player_build_level(player_b))
+
+
+func _party_battle_combat_power() -> float:
+	var total: float = 0.0
+	if player_a != null and player_a.qi_xue > 0 and not _is_battle_peer_escaped(player_a.peer_id):
+		total += get_visible_combat_power(player_a)
+	if player_b != null and player_b.qi_xue > 0 and not _is_battle_peer_escaped(player_b.peer_id):
+		total += get_visible_combat_power(player_b)
+	return maxf(1.0, total)
+
+
+func _battle_build_pressure_gap(player: PlayerData) -> int:
+	if player == null or current_enemy.is_empty():
+		return 0
+	var required: int = _enemy_required_build_level(str(current_enemy.get("quality", "")))
+	var current: int = _player_build_level(player)
+	return maxi(0, required - current)
+
+
+func _battle_build_damage_multiplier(player: PlayerData) -> float:
+	var gap: int = _battle_build_pressure_gap(player)
+	return clampf(1.0 - float(gap) * ENEMY_BUILD_PRESSURE_DAMAGE_LOSS, 0.45, 1.0)
+
+
+func _battle_build_hurt_multiplier(player: PlayerData) -> float:
+	var gap: int = _battle_build_pressure_gap(player)
+	return 1.0 + float(gap) * ENEMY_BUILD_PRESSURE_HURT_GAIN
+
+
+func _battle_build_pressure_text(player: PlayerData) -> String:
+	var gap: int = _battle_build_pressure_gap(player)
+	if player == null or gap <= 0:
+		return ""
+	var required: int = _enemy_required_build_level(str(current_enemy.get("quality", "")))
+	var current: int = _player_build_level(player)
+	return player.player_name + "构筑未稳（" + str(current) + "/" + str(required) + "），被妖威压制"
+
+
+func _enemy_threat_level_for_battle(enemy_quality: String, enemy_power: float, party_power: float, enemy_count: int) -> int:
+	var threat_level: int = 0
+	var ratio: float = enemy_power / maxf(1.0, party_power)
+	if ratio >= 1.35:
+		threat_level = 3
+	elif ratio >= 1.15:
+		threat_level = 2
+	elif ratio >= 0.95:
+		threat_level = 1
+	var build_gap: int = maxi(0, _enemy_required_build_level(enemy_quality) - _party_best_build_level())
+	threat_level = maxi(threat_level, build_gap)
+	if enemy_elite:
+		threat_level += 1
+	if enemy_count >= 2 and ratio >= 0.80:
+		threat_level += 1
+	return clampi(threat_level, 0, ENEMY_THREAT_MAX_LEVEL)
+
+
+func _battle_enemy_threat_level() -> int:
+	if current_enemy.is_empty():
+		return 0
+	return clampi(int(current_enemy.get("threat_level", 0)), 0, ENEMY_THREAT_MAX_LEVEL)
+
+
+func _battle_enemy_threat_damage_multiplier() -> float:
+	var threat_level: int = _battle_enemy_threat_level()
+	return clampf(1.0 - float(threat_level) * ENEMY_THREAT_DAMAGE_LOSS, 0.55, 1.0)
+
+
+func _battle_enemy_threat_hurt_multiplier() -> float:
+	var threat_level: int = _battle_enemy_threat_level()
+	return 1.0 + float(threat_level) * ENEMY_THREAT_HURT_GAIN
+
+
+func _enemy_threat_text(threat_level: int) -> String:
+	match threat_level:
+		1:
+			return "妖威渐盛，正面硬拼已有风险"
+		2:
+			return "妖威压境，未成套者容易受创"
+		3:
+			return "大妖横压，道基不稳者九死一生"
+		_:
+			return "凶煞滔天，此战不可恋战"
+
+
 func _battle_action_damage(player: PlayerData, action: String) -> int:
 	if player != null:
 		player.final_attributes["last_treasure_attack_effects"] = []
@@ -8356,6 +10456,14 @@ func _battle_action_damage(player: PlayerData, action: String) -> int:
 		effect_logs.append("暴击！")
 		if player != null:
 			player.final_attributes["last_battle_crit"] = true
+	var build_multiplier: float = _battle_build_damage_multiplier(player)
+	if build_multiplier < 0.999:
+		damage_float *= build_multiplier
+		effect_logs.append("构筑压制-" + str(int(round((1.0 - build_multiplier) * 100.0))) + "%")
+	var threat_multiplier: float = _battle_enemy_threat_damage_multiplier()
+	if threat_multiplier < 0.999:
+		damage_float *= threat_multiplier
+		effect_logs.append("妖威压制-" + str(int(round((1.0 - threat_multiplier) * 100.0))) + "%")
 	var preview_damage: int = maxi(1, int(round(damage_float))) + ghost_damage
 	if lifesteal_rate > 0.0:
 		var heal_value: int = maxi(1, int(round(float(preview_damage) * lifesteal_rate)))
@@ -8416,6 +10524,18 @@ func _battle_hurt_after_reduction(player: PlayerData, hurt: int, action: String 
 	var final_hurt: int = maxi(0, int(round(float(hurt) * (1.0 - reduction))))
 	if player == null or final_hurt <= 0:
 		return final_hurt
+	var build_hurt_multiplier: float = _battle_build_hurt_multiplier(player)
+	if build_hurt_multiplier > 1.001:
+		final_hurt = maxi(1, int(round(float(final_hurt) * build_hurt_multiplier)))
+		player.final_attributes["last_build_pressure_hurt"] = int(round((build_hurt_multiplier - 1.0) * 100.0))
+	else:
+		player.final_attributes.erase("last_build_pressure_hurt")
+	var threat_hurt_multiplier: float = _battle_enemy_threat_hurt_multiplier()
+	if threat_hurt_multiplier > 1.001:
+		final_hurt = maxi(1, int(round(float(final_hurt) * threat_hurt_multiplier)))
+		player.final_attributes["last_enemy_threat_hurt"] = int(round((threat_hurt_multiplier - 1.0) * 100.0))
+	else:
+		player.final_attributes.erase("last_enemy_threat_hurt")
 	var max_hp: int = _get_player_max_hp(player)
 	var ghost_guard: int = int(player.final_attributes.get("battle_ghost_guard", 0))
 	if ghost_guard > 0:
@@ -8518,6 +10638,8 @@ func _clear_last_battle_mechanic_flags(player: PlayerData) -> void:
 		"last_talisman_counter_damage",
 		"last_heart_guard_heal",
 		"last_dan_life_heal",
+		"last_build_pressure_hurt",
+		"last_enemy_threat_hurt",
 	]:
 		player.final_attributes.erase(key)
 
@@ -8526,6 +10648,12 @@ func _battle_mechanic_log(player: PlayerData) -> String:
 	if player == null:
 		return ""
 	var parts: Array[String] = []
+	var build_pressure_hurt: int = int(player.final_attributes.get("last_build_pressure_hurt", 0))
+	if build_pressure_hurt > 0:
+		parts.append("构筑未稳+" + str(build_pressure_hurt) + "%")
+	var threat_hurt: int = int(player.final_attributes.get("last_enemy_threat_hurt", 0))
+	if threat_hurt > 0:
+		parts.append("妖威压境+" + str(threat_hurt) + "%")
 	var ghost_absorb: int = int(player.final_attributes.get("last_ghost_guard_absorb", 0))
 	if ghost_absorb > 0:
 		parts.append("小鬼挡劫-" + str(ghost_absorb))
@@ -8604,7 +10732,7 @@ func _roll_enemy_pack_count(enemy_quality: String) -> int:
 	chance += float(_quality_rank(enemy_quality)) * 0.015
 	if enemy_elite:
 		chance += 0.10
-	return 2 if rng.randf() < clampf(chance, 0.0, 0.52) else 1
+	return 2 if rng.randf() < clampf(chance, 0.0, 0.68) else 1
 
 
 func _enemy_pack_title(enemy_quality: String, count: int) -> String:
@@ -8639,10 +10767,24 @@ func start_battle(enemy_quality: String) -> void:
 	if enemy_elite:
 		current_enemy["hp"] = int(round(float(current_enemy.get("hp", 0)) * 1.5))
 		current_enemy["attack"] = int(round(float(current_enemy.get("attack", 0)) * 1.5))
+	var round_hp_scale: float = 1.0 + float(maxi(0, round_number - 1)) * 0.08
+	var round_attack_scale: float = 1.0 + float(maxi(0, round_number - 1)) * 0.04
+	current_enemy["hp"] = int(round(float(current_enemy.get("hp", 0)) * round_hp_scale))
+	current_enemy["attack"] = int(round(float(current_enemy.get("attack", 0)) * round_attack_scale))
 
 	var enemy_count: int = _roll_enemy_pack_count(enemy_quality)
 	var single_hp: int = int(current_enemy.get("hp", 0))
 	var single_attack: int = int(current_enemy.get("attack", 0))
+	var expected_party_damage: float = _party_expected_battle_damage()
+	var survive_actions: float = ENEMY_ELITE_SURVIVE_ACTIONS if enemy_elite else ENEMY_MIN_SURVIVE_ACTIONS
+	var hp_floor: int = int(round(expected_party_damage * survive_actions))
+	var hp_was_raised: bool = hp_floor > single_hp
+	single_hp = maxi(single_hp, hp_floor)
+	var attack_floor: int = int(round(_party_average_max_hp() * ENEMY_ATTACK_HP_PRESSURE * (1.15 if enemy_elite else 1.0)))
+	var attack_was_raised: bool = attack_floor > single_attack
+	single_attack = maxi(single_attack, attack_floor)
+	current_enemy["dynamic_scaled"] = hp_was_raised or attack_was_raised
+	current_enemy["expected_party_damage"] = int(round(expected_party_damage))
 	current_enemy["enemy_count"] = enemy_count
 	current_enemy["alive_count"] = enemy_count
 	current_enemy["single_max_hp"] = single_hp
@@ -8652,12 +10794,28 @@ func start_battle(enemy_quality: String) -> void:
 	current_enemy["quality"] = enemy_quality
 	current_enemy["name"] = _enemy_pack_title(enemy_quality, enemy_count)
 	_refresh_enemy_pack_state()
+	battle_escaped_peers.clear()
+	var party_power: float = _party_battle_combat_power()
+	var enemy_power: float = get_enemy_visible_combat_power(current_enemy)
+	var threat_level: int = _enemy_threat_level_for_battle(enemy_quality, enemy_power, party_power, enemy_count)
+	current_enemy["threat_level"] = threat_level
+	current_enemy["party_power_at_start"] = int(round(party_power))
+	current_enemy["enemy_power_at_start"] = int(round(enemy_power))
 	battle_contributions.clear()
 	battle_choices.clear()
-	battle_escaped_peers.clear()
 	battle_log.clear()
+	if bool(current_enemy.get("dynamic_scaled", false)):
+		battle_log.append("妖兽感到杀意，气血与妖力随你的战力攀升")
 	if enemy_count >= 2:
 		battle_log.append("妖气并起，双妖拦路！先斩一只，压力便会降下来。")
+	if threat_level > 0:
+		battle_log.append(_enemy_threat_text(threat_level))
+	var pressure_a: String = _battle_build_pressure_text(player_a)
+	if pressure_a != "":
+		battle_log.append(pressure_a)
+	var pressure_b: String = _battle_build_pressure_text(player_b)
+	if pressure_b != "":
+		battle_log.append(pressure_b)
 	var prep_a: String = _prepare_battle_route_mechanics(player_a)
 	if prep_a != "":
 		battle_log.append(prep_a)
@@ -8689,6 +10847,95 @@ func _active_battle_player_count() -> int:
 	if player_b != null and not _is_battle_peer_escaped(player_b.peer_id):
 		count += 1
 	return count
+
+
+func _enemy_attack_candidates(hurt_a: int, hurt_b: int, action_a: String, action_b: String, escaped_a: bool, escaped_b: bool) -> Array:
+	var candidates: Array = []
+	if player_a != null and not escaped_a and not _is_battle_peer_escaped(player_a.peer_id) and hurt_a > 0:
+		candidates.append({"key": "a", "name": player_a.player_name, "hurt": hurt_a, "action": action_a})
+	if player_b != null and not escaped_b and not _is_battle_peer_escaped(player_b.peer_id) and hurt_b > 0:
+		candidates.append({"key": "b", "name": player_b.player_name, "hurt": hurt_b, "action": action_b})
+	return candidates
+
+
+func _choose_enemy_single_attack_target(candidates: Array) -> String:
+	var total_weight: float = 0.0
+	var weighted: Array = []
+	for candidate in candidates:
+		var key: String = str((candidate as Dictionary).get("key", ""))
+		var action: String = str((candidate as Dictionary).get("action", ""))
+		var weight: float = maxf(1.0, float((candidate as Dictionary).get("hurt", 0)))
+		match action:
+			"抢攻":
+				weight *= 1.30
+			"逃跑":
+				weight *= 1.12
+			"周旋":
+				weight *= 0.80
+		total_weight += weight
+		weighted.append({"key": key, "weight": weight})
+	if total_weight <= 0.0:
+		return str((candidates[0] as Dictionary).get("key", ""))
+	var roll: float = rng.randf() * total_weight
+	var cursor: float = 0.0
+	for entry in weighted:
+		cursor += float((entry as Dictionary).get("weight", 0.0))
+		if roll <= cursor:
+			return str((entry as Dictionary).get("key", ""))
+	return str(((weighted.back() as Dictionary).get("key", "")))
+
+
+func _apply_enemy_attack_pattern(hurt_a: int, hurt_b: int, action_a: String, action_b: String, escaped_a: bool, escaped_b: bool) -> Dictionary:
+	var candidates: Array = _enemy_attack_candidates(hurt_a, hurt_b, action_a, action_b, escaped_a, escaped_b)
+	if candidates.size() <= 1:
+		var only_target: String = ""
+		if candidates.size() == 1:
+			only_target = str((candidates[0] as Dictionary).get("key", ""))
+		return {"hurt_a": hurt_a, "hurt_b": hurt_b, "mode": "single", "target": only_target, "message": ""}
+
+	var alive_count: int = maxi(1, int(current_enemy.get("alive_count", current_enemy.get("enemy_count", 1))))
+	var group_chance: float = 1.0 - ENEMY_SINGLE_ATTACK_CHANCE
+	if alive_count >= 2:
+		group_chance += float(alive_count - 1) * ENEMY_GROUP_ATTACK_PACK_BONUS
+	if enemy_elite:
+		group_chance += ENEMY_GROUP_ATTACK_ELITE_BONUS
+	group_chance += float(_battle_enemy_threat_level()) * ENEMY_GROUP_ATTACK_THREAT_BONUS
+	group_chance = clampf(group_chance, 0.25, 0.78)
+	if rng.randf() < group_chance:
+		var group_hurt_a: int = hurt_a
+		var group_hurt_b: int = hurt_b
+		if hurt_a > 0 and not escaped_a and player_a != null and not _is_battle_peer_escaped(player_a.peer_id):
+			group_hurt_a = maxi(1, int(round(float(hurt_a) * ENEMY_GROUP_ATTACK_MULTIPLIER)))
+		if hurt_b > 0 and not escaped_b and player_b != null and not _is_battle_peer_escaped(player_b.peer_id):
+			group_hurt_b = maxi(1, int(round(float(hurt_b) * ENEMY_GROUP_ATTACK_MULTIPLIER)))
+		var group_name: String = "群妖" if alive_count >= 2 else "妖兽"
+		return {
+			"hurt_a": group_hurt_a,
+			"hurt_b": group_hurt_b,
+			"mode": "group",
+			"target": "",
+			"message": group_name + "横扫全场，未脱离者皆受波及",
+		}
+
+	var target_key: String = _choose_enemy_single_attack_target(candidates)
+	var target_name: String = ""
+	for candidate in candidates:
+		if str((candidate as Dictionary).get("key", "")) == target_key:
+			target_name = str((candidate as Dictionary).get("name", ""))
+			break
+	var single_hurt_a: int = 0
+	var single_hurt_b: int = 0
+	if target_key == "a":
+		single_hurt_a = maxi(1, int(round(float(hurt_a) * ENEMY_SINGLE_ATTACK_MULTIPLIER)))
+	elif target_key == "b":
+		single_hurt_b = maxi(1, int(round(float(hurt_b) * ENEMY_SINGLE_ATTACK_MULTIPLIER)))
+	return {
+		"hurt_a": single_hurt_a,
+		"hurt_b": single_hurt_b,
+		"mode": "single",
+		"target": target_key,
+		"message": "妖兽锁定" + target_name + "，一记重击破风而至",
+	}
 
 
 func settle_battle_action(peer_id: int, action: String) -> void:
@@ -8856,6 +11103,13 @@ func settle_battle_action(peer_id: int, action: String) -> void:
 		handle_double_escape()
 		return
 
+	var enemy_attack_pattern: Dictionary = _apply_enemy_attack_pattern(hurt_a, hurt_b, action_a, action_b, escaped_a, escaped_b)
+	hurt_a = int(enemy_attack_pattern.get("hurt_a", hurt_a))
+	hurt_b = int(enemy_attack_pattern.get("hurt_b", hurt_b))
+	var enemy_attack_message: String = str(enemy_attack_pattern.get("message", ""))
+	if enemy_attack_message != "":
+		battle_log.append(enemy_attack_message)
+
 	hurt_a = _battle_hurt_after_reduction(player_a, hurt_a, action_a)
 	hurt_b = _battle_hurt_after_reduction(player_b, hurt_b, action_b)
 	enemy_damage_a += _battle_defensive_counter_damage(player_a)
@@ -8879,6 +11133,11 @@ func settle_battle_action(peer_id: int, action: String) -> void:
 	_refresh_enemy_pack_state()
 	player_a.qi_xue = maxi(0, player_a.qi_xue - hurt_a)
 	player_b.qi_xue = maxi(0, player_b.qi_xue - hurt_b)
+	if _single_player_npc_battle_rescue():
+		escaped_b = true
+		if _active_battle_player_count() <= 0:
+			handle_double_escape()
+			return
 	var build_message_a: String = "" if action_a == "脱离" else _apply_build_growth_from_battle(player_a, action_a, enemy_damage_a, hurt_a, escaped_a)
 	var build_message_b: String = "" if action_b == "脱离" else _apply_build_growth_from_battle(player_b, action_b, enemy_damage_b, hurt_b, escaped_b)
 	if build_message_a != "":
@@ -8899,6 +11158,8 @@ func settle_battle_action(peer_id: int, action: String) -> void:
 		"enemy_damage": enemy_damage_a + enemy_damage_b,
 		"escaped_a": escaped_a,
 		"escaped_b": escaped_b,
+		"enemy_attack_mode": str(enemy_attack_pattern.get("mode", "")),
+		"enemy_attack_target": str(enemy_attack_pattern.get("target", "")),
 		"escape_chance_a": escape_chance_a,
 		"escape_chance_b": escape_chance_b,
 		"crit_a": bool(player_a.final_attributes.get("last_battle_crit", false)),
@@ -8908,6 +11169,7 @@ func settle_battle_action(peer_id: int, action: String) -> void:
 	})
 	NetworkManager.send_message("battle_update", update_data)
 	on_battle_update(update_data)
+	_auto_save("battle_round")
 
 	if current_enemy.is_empty():
 		return
@@ -8922,6 +11184,17 @@ func settle_battle_action(peer_id: int, action: String) -> void:
 		return
 	if single_player_mode and _is_battle_peer_escaped(player_a.peer_id) and not _is_battle_peer_escaped(player_b.peer_id):
 		_queue_npc_battle_action()
+
+
+func _single_player_npc_battle_rescue() -> bool:
+	if not single_player_mode or player_b == null or current_state != GameState.BATTLE:
+		return false
+	if player_b.qi_xue > 0 or int(current_enemy.get("hp", 0)) <= 0:
+		return false
+	player_b.qi_xue = maxi(1, int(round(float(_get_player_max_hp(player_b)) * 0.12)))
+	_mark_battle_peer_escaped(player_b.peer_id)
+	battle_log.append(player_b.player_name + "护身符碎裂，重伤脱离本战")
+	return true
 
 
 func _apply_build_growth_from_battle(player: PlayerData, action: String, enemy_damage: int, hurt: int, escaped: bool) -> String:
@@ -9175,6 +11448,8 @@ func _grant_enemy_special_loot(player: PlayerData, quality: String, contribution
 	var loot_lines: Array[String] = []
 	var treasure_chance: float = 0.20 if was_elite else 0.10
 	var technique_chance: float = 0.40 if was_elite else 0.20
+	var material_chance: float = 0.55 if was_elite else 0.35
+	var bonus_material_chance: float = 0.30 if was_elite else 0.0
 	if rng.randf() < treasure_chance:
 		var treasure_quality: String = _quality_by_rank(rng.randi_range(min_rank, max_rank))
 		var treasure: Dictionary = generate_treasure_for_player(player, treasure_quality)
@@ -9182,6 +11457,16 @@ func _grant_enemy_special_loot(player: PlayerData, quality: String, contribution
 	if rng.randf() < technique_chance:
 		var technique_quality: String = _quality_by_rank(rng.randi_range(min_rank, max_rank))
 		loot_lines.append(player.player_name + "夺得功法掉落：" + _grant_technique_reward(player, technique_quality))
+	if rng.randf() < material_chance:
+		var material_type: String = "alchemy" if rng.randf() < 0.5 else "craft"
+		var material_quality: String = _quality_by_rank(rng.randi_range(min_rank, max_rank))
+		var material_label: String = "灵草" if material_type == "alchemy" else "矿材"
+		loot_lines.append(player.player_name + "搜得" + material_label + "：" + _store_material_item(player, material_type, material_quality))
+	if rng.randf() < bonus_material_chance:
+		var bonus_material_type: String = "alchemy" if rng.randf() < 0.5 else "craft"
+		var bonus_material_quality: String = _quality_by_rank(rng.randi_range(min_rank, max_rank))
+		var bonus_material_label: String = "灵草" if bonus_material_type == "alchemy" else "矿材"
+		loot_lines.append(player.player_name + "额外搜得" + bonus_material_label + "：" + _store_material_item(player, bonus_material_type, bonus_material_quality))
 
 	var amount: int = 80 + _quality_rank(quality) * 45 + elite_bonus * 70
 	player.ling_shi += amount
@@ -9431,11 +11716,26 @@ func has_dan(player: PlayerData, dan_name: String) -> bool:
 		if str(item_data.get("name", "")) == dan_name:
 			return true
 
-	var next_realm: String = str(NEXT_REALM_MAP.get(player.realm, ""))
-	if next_realm != "":
-		var realm_data: Dictionary = REALMS.get(next_realm, {}) as Dictionary
-		var req: int = int(realm_data.get("ling_li_req", 0))
-		if req > 0 and player.ling_li >= req + 80:
+	return false
+
+
+func _consume_breakthrough_dan(player: PlayerData, dan_name: String) -> bool:
+	if dan_name == "":
+		return true
+	if player == null:
+		return false
+	var dans: Array = player.final_attributes.get("dans", []) as Array
+	if dans.has(dan_name):
+		dans.erase(dan_name)
+		player.final_attributes["dans"] = dans
+		return true
+	for i in range(player.backpack.size()):
+		if not player.backpack[i] is Dictionary:
+			continue
+		var entry: Dictionary = player.backpack[i] as Dictionary
+		var item_data: Dictionary = entry.get("data", {}) as Dictionary
+		if str(item_data.get("name", "")) == dan_name:
+			player.backpack.remove_at(i)
 			return true
 	return false
 
@@ -9511,7 +11811,7 @@ func request_breakthrough(peer_id: int) -> void:
 	if not NetworkManager.is_host:
 		return
 
-	if current_state == GameState.REST or current_state == GameState.AUCTION or current_state == GameState.TRIBULATION or current_state == GameState.BATTLE or current_state == GameState.DUEL or current_state == GameState.ENDING:
+	if current_state == GameState.REST or current_state == GameState.AUCTION or current_state == GameState.TRIBULATION or current_state == GameState.BATTLE or current_state == GameState.DUEL or current_state == GameState.SECT_EVENT or current_state == GameState.ENDING:
 		var busy_data: Dictionary = _breakthrough_feedback_data(peer_id, "当前状态无法突破")
 		NetworkManager.send_message("breakthrough_feedback", busy_data)
 		on_breakthrough_feedback(busy_data)
@@ -9538,6 +11838,7 @@ func _start_minor_breakthrough(player: PlayerData, peer_id: int, target_name: St
 	if player == null:
 		return
 
+	var cost: int = get_next_breakthrough_req(player)
 	var chance: float = get_breakthrough_success_chance(player, "minor")
 	if rng.randf() > chance:
 		var fail_data: Dictionary = _apply_breakthrough_failure(player, "minor")
@@ -9547,11 +11848,12 @@ func _start_minor_breakthrough(player: PlayerData, peer_id: int, target_name: St
 		on_breakthrough_feedback(fail_feedback)
 		return
 
+	var spent: int = _spend_breakthrough_ling_li(player, cost)
 	player.minor_stage = clampi(player.minor_stage + 1, 1, MINOR_STAGE_NAMES.size())
 	_heal_player_to_full(player)
 	var life_reward: int = _apply_breakthrough_life_reward(player, "minor")
 	var reached_name: String = get_cultivation_stage_name(player)
-	var message: String = player.player_name + "突破至" + (target_name if target_name != "" else reached_name) + "，寿元 +" + str(life_reward) + "，成功率 " + str(int(round(chance * 100.0))) + "%"
+	var message: String = player.player_name + "突破至" + (target_name if target_name != "" else reached_name) + "，消耗修为 " + str(spent) + "，寿元 +" + str(life_reward) + "，成功率 " + str(int(round(chance * 100.0))) + "%"
 	var sword_growth_message: String = _grow_treasure_for_cultivation(player, "剑修", 5)
 	if sword_growth_message != "":
 		message += "；" + sword_growth_message
@@ -9591,29 +11893,24 @@ func on_breakthrough_feedback(data: Dictionary) -> void:
 	_apply_player_snapshot(player_a, data.get("player_a", {}) as Dictionary)
 	_apply_player_snapshot(player_b, data.get("player_b", {}) as Dictionary)
 	breakthrough_feedback.emit(data)
+	_auto_save("breakthrough")
 
 
 func check_breakthrough() -> void:
 	if not NetworkManager.is_host:
 		return
-	_apply_round_end_grace()
-	if check_duel_trigger():
-		return
-	if _try_queue_npc_breakthrough():
-		return
-
-	if not single_player_mode:
-		_start_new_round.rpc()
-	_start_new_round()
+	_advance_after_round_end(true)
 
 
 func _try_queue_npc_breakthrough() -> bool:
 	if not single_player_mode or player_b == null:
 		return false
-	if current_state == GameState.REST or current_state == GameState.AUCTION or current_state == GameState.TRIBULATION or current_state == GameState.BATTLE or current_state == GameState.DUEL or current_state == GameState.ENDING:
+	if current_state == GameState.REST or current_state == GameState.AUCTION or current_state == GameState.TRIBULATION or current_state == GameState.BATTLE or current_state == GameState.DUEL or current_state == GameState.SECT_EVENT or current_state == GameState.ENDING:
 		return false
 	var status: Dictionary = get_breakthrough_status(player_b)
 	if not bool(status.get("can", false)):
+		return false
+	if not _npc_should_attempt_breakthrough(status):
 		return false
 	_queue_npc_breakthrough()
 	return true
@@ -9626,20 +11923,40 @@ func _queue_npc_breakthrough() -> void:
 	await get_tree().create_timer(0.85).timeout
 	if not single_player_mode or player_b == null:
 		return
-	if current_state == GameState.REST or current_state == GameState.AUCTION or current_state == GameState.TRIBULATION or current_state == GameState.BATTLE or current_state == GameState.DUEL or current_state == GameState.ENDING:
+	if current_state == GameState.REST or current_state == GameState.AUCTION or current_state == GameState.TRIBULATION or current_state == GameState.BATTLE or current_state == GameState.DUEL or current_state == GameState.SECT_EVENT or current_state == GameState.ENDING:
 		return
 	var status: Dictionary = get_breakthrough_status(player_b)
 	if not bool(status.get("can", false)):
-		_start_new_round()
+		_start_next_round_for_all()
+		return
+	if not _npc_should_attempt_breakthrough(status):
+		_start_next_round_for_all()
 		return
 
 	request_breakthrough(player_b.peer_id)
 	await get_tree().create_timer(1.15).timeout
 	if not single_player_mode:
 		return
-	if current_state == GameState.TRIBULATION or current_state == GameState.DUEL or current_state == GameState.ENDING:
+	if current_state == GameState.TRIBULATION or current_state == GameState.DUEL or current_state == GameState.SECT_EVENT or current_state == GameState.ENDING:
 		return
-	_start_new_round()
+	_start_next_round_for_all()
+
+
+func _npc_should_attempt_breakthrough(status: Dictionary) -> bool:
+	if player_b == null:
+		return false
+	var hp_rate: float = float(player_b.qi_xue) / float(maxi(1, _get_player_max_hp(player_b)))
+	var breakthrough_type: String = str(status.get("type", ""))
+	var chance: float = float(status.get("success_chance", get_breakthrough_success_chance(player_b, breakthrough_type)))
+	match breakthrough_type:
+		"minor":
+			return hp_rate >= 0.38 and chance >= 0.46
+		"major":
+			return hp_rate >= 0.70 and chance >= 0.48
+		"duel":
+			return true
+		_:
+			return hp_rate >= 0.50
 
 
 func _start_breakthrough(player: PlayerData, next_realm: String) -> void:
@@ -9652,6 +11969,7 @@ func _start_breakthrough(player: PlayerData, next_realm: String) -> void:
 	pending_tribulation_data["player_name"] = player.player_name
 	pending_tribulation_data["player_peer_id"] = player.peer_id
 	pending_tribulation_data["next_realm"] = next_realm
+	pending_tribulation_data["ling_li_req"] = get_realm_ling_li_req(next_realm)
 	bargain_choices.clear()
 	bargain_continue_votes.clear()
 	tribulation_choices.clear()
@@ -9799,6 +12117,12 @@ func settle_tribulation(peer_id: int, choice: String) -> void:
 		"player_b": _player_snapshot(player_b),
 	}
 
+	var npc_rescue_message: String = _single_player_npc_tribulation_rescue()
+	if npc_rescue_message != "":
+		tribulation_growth_messages.append(npc_rescue_message)
+		result["player_a"] = _player_snapshot(player_a)
+		result["player_b"] = _player_snapshot(player_b)
+
 	if pending_breakthrough_player.qi_xue <= 0:
 		result["death_peer_id"] = pending_breakthrough_player.peer_id
 		handle_player_death(pending_breakthrough_player, result)
@@ -9821,15 +12145,17 @@ func settle_tribulation(peer_id: int, choice: String) -> void:
 		result["player_b"] = _player_snapshot(player_b)
 		NetworkManager.send_message("tribulation_result", result)
 		on_tribulation_result(result)
-		pending_breakthrough_player = null
+		_clear_pending_tribulation_state()
 
 		await get_tree().create_timer(2.0).timeout
-		if not single_player_mode:
-			_start_new_round.rpc()
-		_start_new_round()
+		_start_next_round_for_all()
 		return
 
 	var realm_data: Dictionary = REALMS[tribulation_next_realm] as Dictionary
+	var breakthrough_cost: int = int(pending_tribulation_data.get("ling_li_req", get_realm_ling_li_req(tribulation_next_realm)))
+	var spent_ling_li: int = _spend_breakthrough_ling_li(pending_breakthrough_player, breakthrough_cost)
+	var dan_name: String = str(realm_data.get("dan", ""))
+	_consume_breakthrough_dan(pending_breakthrough_player, dan_name)
 	pending_breakthrough_player.realm = tribulation_next_realm
 	pending_breakthrough_player.minor_stage = 1
 	pending_breakthrough_player.speed = int(realm_data.get("speed_base", 10)) + int(pending_breakthrough_player.stats.get("身法", 0)) * 6
@@ -9837,7 +12163,7 @@ func settle_tribulation(peer_id: int, choice: String) -> void:
 	var life_reward: int = _apply_breakthrough_life_reward(pending_breakthrough_player, "major")
 	result["success"] = true
 	result["success_chance"] = breakthrough_chance
-	result["message"] = pending_breakthrough_player.player_name + "突破至" + tribulation_next_realm + "，寿元 +" + str(life_reward) + "，成功率 " + str(int(round(breakthrough_chance * 100.0))) + "%"
+	result["message"] = pending_breakthrough_player.player_name + "突破至" + tribulation_next_realm + "，消耗修为 " + str(spent_ling_li) + "，寿元 +" + str(life_reward) + "，成功率 " + str(int(round(breakthrough_chance * 100.0))) + "%"
 	var major_sword_growth_message: String = _grow_treasure_for_cultivation(pending_breakthrough_player, "剑修", 5)
 	if major_sword_growth_message != "":
 		tribulation_growth_messages.append(pending_breakthrough_player.player_name + "：" + major_sword_growth_message)
@@ -9850,19 +12176,29 @@ func settle_tribulation(peer_id: int, choice: String) -> void:
 	result["player_b"] = _player_snapshot(player_b)
 	NetworkManager.send_message("tribulation_result", result)
 	on_tribulation_result(result)
+	_clear_pending_tribulation_state()
 
 	await get_tree().create_timer(2.0).timeout
 	if check_duel_trigger():
 		return
-	if not single_player_mode:
-		_start_new_round.rpc()
-	_start_new_round()
+	_start_next_round_for_all()
 
 
 func on_tribulation_result(data: Dictionary) -> void:
 	_apply_player_snapshot(player_a, data.get("player_a", {}) as Dictionary)
 	_apply_player_snapshot(player_b, data.get("player_b", {}) as Dictionary)
 	tribulation_settled.emit(data)
+	_auto_save("tribulation")
+
+
+func _single_player_npc_tribulation_rescue() -> String:
+	if not single_player_mode or player_b == null or current_state != GameState.TRIBULATION:
+		return ""
+	if player_b.qi_xue > 0:
+		return ""
+	player_b.qi_xue = maxi(1, int(round(float(_get_player_max_hp(player_b)) * 0.10)))
+	player_b.ling_li = maxi(0, player_b.ling_li - 30)
+	return player_b.player_name + "护身符碎裂，吊住一口气"
 
 
 func handle_player_death(dead_player: PlayerData, result: Dictionary = {}) -> void:
@@ -10294,8 +12630,13 @@ func reset_game() -> void:
 	tribulation_choices.clear()
 	duel_data.clear()
 	duel_round_number = 0
+	duel_mode = "final"
+	duel_continue_votes.clear()
 	pending_duel_winner_key = ""
 	pending_duel_loser_key = ""
+	current_sect_event.clear()
+	sect_event_choices.clear()
+	sect_event_continue_votes.clear()
 	ending_scroll_data.clear()
 	change_state(GameState.STAT_ALLOCATION)
 
