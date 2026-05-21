@@ -3278,6 +3278,9 @@ func _apply_build_growth_from_bargain(player: PlayerData, result: Dictionary, ca
 			var card_hp_damage_taken: int = int(result.get("hp_damage_taken", 0))
 			if card_type == "灾厄" and card_hp_damage_taken > 0:
 				growth_amount += maxi(1, int(floor(float(card_hp_damage_taken) / 10.0)))
+		"符修":
+			if card_type == "灾厄" and choice == "抢":
+				growth_amount += 1
 	var effect_type: String = str(card.get("effect_type", ""))
 	var messages: Array[String] = []
 	var treasure_message: String = grow_treasure(player, growth_amount)
@@ -3309,7 +3312,7 @@ func _apply_build_growth_from_bargain(player: PlayerData, result: Dictionary, ca
 		technique_growth_messages.append(_grow_techniques_for_cultivation(player, "体修", 1, "承厄炼体"))
 		technique_growth_messages.append(_grow_techniques_for_cultivation(player, "阵修", 1, "布阵承厄"))
 		technique_growth_messages.append(_grow_techniques_for_cultivation(player, "情修", 1, "护道承厄"))
-	if card_type == "灾厄" and choice == "抢" and lose <= 0.0:
+	if card_type == "灾厄" and choice == "抢":
 		technique_growth_messages.append(_grow_techniques_for_cultivation(player, "符修", 1, "遁符避厄"))
 	if effect_type == "dan" and gain > 0.0:
 		technique_growth_messages.append(_grow_techniques_for_cultivation(player, "丹修", 1, "炼丹"))
