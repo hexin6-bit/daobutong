@@ -2241,13 +2241,14 @@ func _update_player_info() -> void:
 func _update_power_label(label: Label, player: PlayerData, is_enemy: bool) -> void:
 	if label == null or player == null:
 		return
-	var power: int = int(round(GameManager.get_visible_combat_power(player)))
+	var breakdown: Dictionary = GameManager.get_visible_combat_power_breakdown(player)
+	var power: int = int(breakdown.get("total", int(round(GameManager.get_visible_combat_power(player)))))
 	var previous: int = last_enemy_power if is_enemy else last_my_power
 	var arrow: String = ""
 	if previous >= 0 and power != previous:
 		arrow = " ↑" if power > previous else " ↓"
-	label.text = "战力：" + _format_int_value(power) + arrow
-	label.tooltip_text = GameManager.get_visible_combat_power_formula_text()
+	label.text = "战力：" + _format_int_value(power) + arrow + "（修" + str(int(breakdown.get("cultivation", 0))) + "/属" + str(int(breakdown.get("attribute", 0))) + "/构" + str(int(breakdown.get("build", 0))) + "）"
+	label.tooltip_text = GameManager.get_visible_combat_power_formula_text() + "\n" + GameManager.get_visible_combat_power_breakdown_text(player)
 	label.add_theme_color_override("font_color", Color("#80c080") if arrow == " ↑" else (Color("#ff8080") if arrow == " ↓" else Color("#f0c040")))
 	if is_enemy:
 		last_enemy_power = power

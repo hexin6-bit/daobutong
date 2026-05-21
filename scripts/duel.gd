@@ -670,8 +670,18 @@ func _format_last_action(result: Dictionary) -> String:
 			clean_header += "（暴击）"
 	var clean_lines: Array[String] = [clean_header]
 	var clean_details: Array = result.get("明细", []) as Array
-	for i in range(mini(3, clean_details.size())):
-		clean_lines.append("· " + str(clean_details[i]))
+	var key_details: Array[String] = []
+	for detail in clean_details:
+		var detail_text: String = str(detail)
+		if detail_text.contains("基础") or detail_text.contains("法宝") or detail_text.contains("境界") or detail_text.contains("暴击") or detail_text.contains("闪避") or detail_text.contains("防御") or detail_text.contains("最终"):
+			key_details.append(detail_text)
+		if key_details.size() >= 4:
+			break
+	if key_details.is_empty():
+		for i in range(mini(2, clean_details.size())):
+			key_details.append(str(clean_details[i]))
+	for detail_text in key_details:
+		clean_lines.append("· " + detail_text)
 	return "\n".join(clean_lines)
 
 

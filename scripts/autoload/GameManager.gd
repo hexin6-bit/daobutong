@@ -141,6 +141,7 @@ const ALCHEMY_LONGEVITY_GAIN := 2
 const ALCHEMY_RELATED_STATS := ["气感", "机缘"]
 const REFINING_RELATED_STATS := ["体魄", "经商"]
 const DUEL_LING_LI_REQ := 3200
+const FINAL_DUEL_FORCE_ROUND := 30
 const SECT_EVENT_ROUND_INTERVAL := 3
 const SECT_EVENT_CHOICE_SECONDS := 10.0
 const SECT_EVENT_PRIVATE_DRAW_COUNT := 5
@@ -175,6 +176,8 @@ const ENEMY_GROUP_ATTACK_THREAT_BONUS := 0.04
 const ENEMY_MIN_SURVIVE_ACTIONS := 2.4
 const ENEMY_ELITE_SURVIVE_ACTIONS := 3.2
 const ENEMY_ATTACK_HP_PRESSURE := 0.11
+const BATTLE_HEAVY_WOUND_LIFE_LOSS := 3
+const BATTLE_HEAVY_WOUND_RECOVER_RATE := 0.30
 const ENEMY_BUILD_PRESSURE_DAMAGE_LOSS := 0.16
 const ENEMY_BUILD_PRESSURE_HURT_GAIN := 0.18
 const ENEMY_THREAT_DAMAGE_LOSS := 0.08
@@ -226,8 +229,8 @@ const MAX_FORBEARANCE := 8
 const CALAMITY_CONTEST_MIN_VALUE := 20.0
 const CONTEST_POWER_ADVANTAGE_MIN_RATIO := 1.08
 const CONTEST_POWER_ADVANTAGE_MIN_DELTA := 6.0
-const CONTEST_WEAK_COUNTER_MIN_CHANCE := 0.03
-const CONTEST_WEAK_COUNTER_MAX_CHANCE := 0.24
+const CONTEST_WEAK_COUNTER_MIN_CHANCE := 0.05
+const CONTEST_WEAK_COUNTER_MAX_CHANCE := 0.35
 const CONTEST_WEAK_COUNTER_PRESSURE_BONUS := 0.01
 const CULTIVATION_TYPES := ["鬼修", "体修", "剑修", "情修", "丹修", "阵修", "符修", "器修"]
 const SECT_TYPES := ["万魂殿", "金刚寺", "天剑阁", "百花谷", "丹霞山", "阵宗", "符箓门", "器府"]
@@ -1153,6 +1156,9 @@ func _advance_after_round_end(allow_sparring: bool = true) -> void:
 	if current_state != GameState.BARGAIN:
 		change_state(GameState.BARGAIN)
 	_apply_round_end_grace()
+	if round_number >= FINAL_DUEL_FORCE_ROUND:
+		_start_rest_phase(true)
+		return
 	if check_duel_trigger():
 		return
 	if allow_sparring and _should_trigger_sect_event():
@@ -3657,7 +3663,36 @@ func get_visible_combat_power(player: PlayerData) -> float:
 
 
 func get_visible_combat_power_formula_text() -> String:
-	return "战力 = 攻击×2 + 防御 + 当前气血×0.5 + 速度×0.2 + 法宝成长 + 境界战力"
+	return "战力 = 修为战力（境界压制） + 属性战力（攻防血速） + 构筑战力（法宝成长/套装机制）"
+
+
+func get_visible_combat_power_breakdown(player: PlayerData) -> Dictionary:
+	if player == null:
+		return {"total": 0, "cultivation": 0, "attribute": 0, "build": 0}
+	var stats: Dictionary = calculate_duel_stats(player)
+	var cultivation_power: float = float(stats.get("境界战力", 0))
+	var attribute_power: float = (
+		float(stats.get("攻击力", 0)) * 2.0
+		+ float(stats.get("防御力", 0))
+		+ float(stats.get("当前气血", stats.get("气血", 0))) * 0.5
+		+ float(stats.get("速度", 0)) * 0.2
+	)
+	var build_power: float = (
+		float(stats.get("法宝成长", 0))
+		+ float(stats.get("构筑层级", 0)) * 8.0
+	)
+	var total_power: float = float(stats.get("战力", cultivation_power + attribute_power + build_power))
+	return {
+		"total": int(round(total_power)),
+		"cultivation": int(round(cultivation_power)),
+		"attribute": int(round(attribute_power)),
+		"build": int(round(build_power)),
+	}
+
+
+func get_visible_combat_power_breakdown_text(player: PlayerData) -> String:
+	var breakdown: Dictionary = get_visible_combat_power_breakdown(player)
+	return "战力拆解：修为 " + str(int(breakdown.get("cultivation", 0))) + " / 属性 " + str(int(breakdown.get("attribute", 0))) + " / 构筑 " + str(int(breakdown.get("build", 0)))
 
 
 func get_enemy_visible_combat_power(enemy: Dictionary = {}) -> float:
@@ -3710,6 +3745,27 @@ func _contest_pressure_stacks(player: PlayerData) -> int:
 	if player == null:
 		return 0
 	return maxi(0, int(player.forbearance) - 2)
+
+
+func _player_has_mastered_technique(player: PlayerData) -> bool:
+	if player == null:
+		return false
+	for technique in player.techniques:
+		if technique is Dictionary and str((technique as Dictionary).get("technique_realm", "")) == "大成":
+			return true
+	return false
+
+
+func _player_has_awakened_treasure(player: PlayerData) -> bool:
+	if player == null:
+		return false
+	for treasure in player.treasures:
+		if not treasure is Dictionary:
+			continue
+		var treasure_data: Dictionary = treasure as Dictionary
+		if int(treasure_data.get("awakening_level", 0)) > 0 or bool(treasure_data.get("awakened", false)):
+			return true
+	return false
 
 
 func on_contest_started(data: Dictionary) -> void:
@@ -3810,9 +3866,20 @@ func _contest_weak_counter_chance(card: Dictionary) -> float:
 	if weak_power <= 0.0 or strong_power <= 0.0:
 		return CONTEST_WEAK_COUNTER_MIN_CHANCE
 	var ratio: float = clampf(weak_power / maxf(1.0, strong_power), 0.0, 1.0)
-	var chance: float = 0.02 + pow(ratio, 3.0) * 0.22
+	var gap_steps: float = maxf(0.0, (1.0 - ratio) / 0.10)
+	var chance: float = 0.20 - gap_steps * 0.03
 	var weak_player: PlayerData = _player_by_key(weak_key)
-	chance += minf(0.04, float(_contest_pressure_stacks(weak_player)) * CONTEST_WEAK_COUNTER_PRESSURE_BONUS)
+	if weak_player != null:
+		var build_level: int = int(weak_player.final_attributes.get("cultivation_bond_level", 0))
+		if build_level >= 1:
+			chance += 0.05
+		if build_level >= 4:
+			chance += 0.05
+		if _player_has_mastered_technique(weak_player):
+			chance += 0.05
+		if _player_has_awakened_treasure(weak_player):
+			chance += 0.05
+		chance += minf(0.03, float(_contest_pressure_stacks(weak_player)) * CONTEST_WEAK_COUNTER_PRESSURE_BONUS)
 	if str(card.get("type", "")) == "灾厄":
 		chance *= 0.85
 	return clampf(chance, CONTEST_WEAK_COUNTER_MIN_CHANCE, CONTEST_WEAK_COUNTER_MAX_CHANCE)
@@ -5141,7 +5208,8 @@ func _prepare_technique(technique: Dictionary) -> Dictionary:
 	prepared.erase("combo_desc")
 	prepared.erase("resonances")
 	prepared.erase("is_core_technique")
-	prepared["base_bonuses"] = _normalize_technique_bonuses(raw_base_bonuses, _item_cultivation_fallback(prepared))
+	prepared["primary_cultivation_tag"] = _fixed_technique_cultivation_tag(prepared)
+	prepared["base_bonuses"] = _normalize_technique_bonuses(raw_base_bonuses, str(prepared.get("primary_cultivation_tag", "")))
 	prepared["bonuses"] = (prepared["base_bonuses"] as Dictionary).duplicate(true)
 	prepared["affixes_applied"] = false
 	if not prepared.has("technique_realm"):
@@ -5288,7 +5356,7 @@ func _ensure_item_affixes(item: Dictionary, item_kind: String) -> void:
 	if item.is_empty() or not (item_kind in ["technique", "treasure", "companion"]):
 		return
 	if item_kind in ["technique", "treasure"]:
-		_normalize_cultivation_item_affixes(item)
+		_normalize_cultivation_item_affixes(item, item_kind)
 		if item_kind == "treasure" and not item.has("affix_bonus"):
 			item["affixes_applied"] = false
 	elif item_kind == "companion" and not _companion_affixes_valid(item.get("affixes", []) as Array):
@@ -5389,10 +5457,8 @@ func _technique_affixes_valid(affixes: Array) -> bool:
 
 func _roll_technique_affixes(item: Dictionary = {}) -> Array:
 	var count: int = _quality_affix_count(str(item.get("quality", "筑基级")))
-	var preferred_tag: String = _item_cultivation_fallback(item)
-	if preferred_tag == "":
-		preferred_tag = str(CULTIVATION_TYPES[rng.randi_range(0, CULTIVATION_TYPES.size() - 1)])
-	return _make_cultivation_affix_set(preferred_tag, count, [])
+	var preferred_tag: String = _fixed_technique_cultivation_tag(item)
+	return _make_fixed_cultivation_affix_set(preferred_tag, count, str(item.get("name", "")) + str(item.get("quality", "")))
 
 
 func _make_cultivation_affix_set(primary_tag: String, count: int, existing_affixes: Array = []) -> Array:
@@ -5417,6 +5483,36 @@ func _make_cultivation_affix_set(primary_tag: String, count: int, existing_affix
 	while result.size() < count and used.size() < CULTIVATION_TYPES.size() and guard < 32:
 		guard += 1
 		var tag: String = str(CULTIVATION_TYPES[rng.randi_range(0, CULTIVATION_TYPES.size() - 1)])
+		if used.has(tag):
+			continue
+		result.append(_make_cultivation_affix(tag))
+		used[tag] = true
+	return result
+
+
+func _make_fixed_cultivation_affix_set(primary_tag: String, count: int, seed_text: String, existing_affixes: Array = []) -> Array:
+	var result: Array = []
+	var used: Dictionary = {}
+	if not CULTIVATION_TYPES.has(primary_tag):
+		primary_tag = str(CULTIVATION_TYPES[abs(seed_text.hash()) % CULTIVATION_TYPES.size()])
+	result.append(_make_cultivation_affix(primary_tag))
+	used[primary_tag] = true
+	for affix in existing_affixes:
+		if result.size() >= count:
+			break
+		if not affix is Dictionary:
+			continue
+		var affix_data: Dictionary = affix as Dictionary
+		var tag: String = str(affix_data.get("tag", ""))
+		if str(affix_data.get("affix_kind", "")) != "cultivation" or not CULTIVATION_TYPES.has(tag) or used.has(tag):
+			continue
+		result.append(_make_cultivation_affix(tag))
+		used[tag] = true
+	var start: int = abs(seed_text.hash()) % CULTIVATION_TYPES.size()
+	for offset in range(CULTIVATION_TYPES.size()):
+		if result.size() >= count:
+			break
+		var tag: String = str(CULTIVATION_TYPES[(start + offset) % CULTIVATION_TYPES.size()])
 		if used.has(tag):
 			continue
 		result.append(_make_cultivation_affix(tag))
@@ -5450,6 +5546,17 @@ func _find_cultivation_affix_tag(affixes: Array) -> String:
 	return ""
 
 
+func _cultivation_affix_tag_signature(affixes: Array) -> String:
+	var tags: Array[String] = []
+	for affix in affixes:
+		if not affix is Dictionary:
+			continue
+		var tag: String = str((affix as Dictionary).get("tag", ""))
+		if CULTIVATION_TYPES.has(tag):
+			tags.append(tag)
+	return "|".join(tags)
+
+
 func _item_cultivation_fallback(item: Dictionary) -> String:
 	var fallback_tags: Array[String] = [
 		str(item.get("cultivation_affix", "")),
@@ -5463,7 +5570,40 @@ func _item_cultivation_fallback(item: Dictionary) -> String:
 	return ""
 
 
-func _normalize_cultivation_item_affixes(item: Dictionary) -> void:
+func _fixed_technique_cultivation_tag(item: Dictionary) -> String:
+	var explicit: String = _item_cultivation_fallback(item)
+	if explicit != "":
+		return explicit
+	var name: String = str(item.get("name", ""))
+	if name.contains("鬼") or name.contains("魂") or name.contains("阴") or name.contains("黄泉") or name.contains("万魂"):
+		return "鬼修"
+	if name.contains("体") or name.contains("身") or name.contains("骨") or name.contains("金刚") or name.contains("不灭") or name.contains("玄甲") or name.contains("淬"):
+		return "体修"
+	if name.contains("剑") or name.contains("锋") or name.contains("斩") or name.contains("裂") or name.contains("霄"):
+		return "剑修"
+	if name.contains("红尘") or name.contains("同心") or name.contains("合欢") or name.contains("三生") or name.contains("情") or name.contains("桃花"):
+		return "情修"
+	if name.contains("丹") or name.contains("回春") or name.contains("吐纳") or name.contains("聚灵") or name.contains("青囊"):
+		return "丹修"
+	if name.contains("阵") or name.contains("罗盘") or name.contains("八卦"):
+		return "阵修"
+	if name.contains("符") or name.contains("令"):
+		return "符修"
+	if name.contains("器") or name.contains("锻") or name.contains("炉"):
+		return "器修"
+	var bonuses: Dictionary = item.get("base_bonuses", item.get("bonuses", {})) as Dictionary
+	if bonuses.has("吸血"):
+		return "鬼修"
+	if bonuses.has("反伤") or bonuses.has("战斗减伤") or bonuses.has("防御力") or bonuses.has("气血上限"):
+		return "体修"
+	if bonuses.has("攻击力") or bonuses.has("暴击率") or bonuses.has("破防") or bonuses.has("速度"):
+		return "剑修"
+	if bonuses.has("每轮回血") or bonuses.has("灵力获取"):
+		return "丹修"
+	return str(CULTIVATION_TYPES[abs(name.hash()) % CULTIVATION_TYPES.size()])
+
+
+func _normalize_cultivation_item_affixes(item: Dictionary, item_kind: String = "") -> void:
 	var affixes: Array = item.get("affixes", []) as Array
 	var quality: String = str(item.get("quality", "筑基级"))
 	var target_count: int = _quality_affix_count(quality)
@@ -5471,9 +5611,22 @@ func _normalize_cultivation_item_affixes(item: Dictionary) -> void:
 	if not CULTIVATION_TYPES.has(cultivation_tag):
 		cultivation_tag = _find_cultivation_affix_tag(affixes)
 	if cultivation_tag == "":
-		cultivation_tag = _item_cultivation_fallback(item)
+		cultivation_tag = _fixed_technique_cultivation_tag(item) if item_kind == "technique" else _item_cultivation_fallback(item)
+	if item_kind == "technique":
+		cultivation_tag = _fixed_technique_cultivation_tag(item)
 	if cultivation_tag == "":
 		cultivation_tag = str(CULTIVATION_TYPES[rng.randi_range(0, CULTIVATION_TYPES.size() - 1)])
+	if item_kind == "technique":
+		var fixed_affixes: Array = _make_fixed_cultivation_affix_set(cultivation_tag, target_count, str(item.get("name", "")) + quality, [])
+		if _technique_affixes_valid(affixes) and affixes.size() == target_count and _cultivation_affix_tag_signature(affixes) == _cultivation_affix_tag_signature(fixed_affixes):
+			item["affix_count"] = target_count
+			item["primary_cultivation_tag"] = cultivation_tag
+			return
+		item["affixes"] = fixed_affixes
+		item["affix_count"] = target_count
+		item["primary_cultivation_tag"] = cultivation_tag
+		item["affixes_applied"] = false
+		return
 	if _technique_affixes_valid(affixes) and affixes.size() == target_count and str(item.get("primary_cultivation_tag", cultivation_tag)) == cultivation_tag:
 		item["affix_count"] = target_count
 		item["primary_cultivation_tag"] = cultivation_tag
@@ -6481,9 +6634,20 @@ func _cultivation_bond_stage_lines(cultivation_type: String, route: Dictionary) 
 			mechanic_text = str(bond_data.get("opening", bond_data.get("mechanic", "")))
 		elif level == 4:
 			mechanic_text = str(bond_data.get("mastery", "大成质变"))
+		elif level == 2:
+			mechanic_text = "机制强化一段"
+		elif level == 3:
+			mechanic_text = "机制强化二段"
 		if mechanic_text != "":
 			effect_text = mechanic_text + "；" + effect_text
-		lines.append(state + "｜" + str(need_count) + "件 " + _cultivation_bond_level_name(level) + "：" + effect_text)
+		var stage_label: String = str(need_count) + "件"
+		if level == 1:
+			stage_label += "质变"
+		elif level == 4:
+			stage_label += "大成"
+		else:
+			stage_label += "强化"
+		lines.append(state + "｜" + stage_label + " " + _cultivation_bond_level_name(level) + "：" + effect_text)
 	return lines
 
 
@@ -11148,8 +11312,8 @@ func start_battle(enemy_quality: String) -> void:
 	if enemy_elite:
 		current_enemy["hp"] = int(round(float(current_enemy.get("hp", 0)) * 1.5))
 		current_enemy["attack"] = int(round(float(current_enemy.get("attack", 0)) * 1.5))
-	var round_hp_scale: float = 1.0 + float(maxi(0, round_number - 1)) * 0.08
-	var round_attack_scale: float = 1.0 + float(maxi(0, round_number - 1)) * 0.04
+	var round_hp_scale: float = clampf(0.90 + float(maxi(0, round_number - 1)) * 0.055, 0.90, 2.45)
+	var round_attack_scale: float = clampf(0.85 + float(maxi(0, round_number - 1)) * 0.035, 0.85, 1.85)
 	current_enemy["hp"] = int(round(float(current_enemy.get("hp", 0)) * round_hp_scale))
 	current_enemy["attack"] = int(round(float(current_enemy.get("attack", 0)) * round_attack_scale))
 
@@ -11157,11 +11321,13 @@ func start_battle(enemy_quality: String) -> void:
 	var single_hp: int = int(current_enemy.get("hp", 0))
 	var single_attack: int = int(current_enemy.get("attack", 0))
 	var expected_party_damage: float = _party_expected_battle_damage()
-	var survive_actions: float = ENEMY_ELITE_SURVIVE_ACTIONS if enemy_elite else ENEMY_MIN_SURVIVE_ACTIONS
+	var round_pressure: float = clampf(float(maxi(0, round_number - 1)) / float(maxi(1, FINAL_DUEL_FORCE_ROUND - 1)), 0.0, 1.0)
+	var survive_actions: float = lerpf(1.8, ENEMY_ELITE_SURVIVE_ACTIONS if enemy_elite else ENEMY_MIN_SURVIVE_ACTIONS, round_pressure)
 	var hp_floor: int = int(round(expected_party_damage * survive_actions))
 	var hp_was_raised: bool = hp_floor > single_hp
 	single_hp = maxi(single_hp, hp_floor)
-	var attack_floor: int = int(round(_party_average_max_hp() * ENEMY_ATTACK_HP_PRESSURE * (1.15 if enemy_elite else 1.0)))
+	var attack_pressure: float = lerpf(0.07, ENEMY_ATTACK_HP_PRESSURE * (1.15 if enemy_elite else 1.0), round_pressure)
+	var attack_floor: int = int(round(_party_average_max_hp() * attack_pressure))
 	var attack_was_raised: bool = attack_floor > single_attack
 	single_attack = maxi(single_attack, attack_floor)
 	current_enemy["dynamic_scaled"] = hp_was_raised or attack_was_raised
@@ -11228,6 +11394,27 @@ func _active_battle_player_count() -> int:
 	if player_b != null and not _is_battle_peer_escaped(player_b.peer_id):
 		count += 1
 	return count
+
+
+func _apply_battle_heavy_wounds() -> bool:
+	var changed: bool = false
+	for player in [player_a, player_b]:
+		if player == null:
+			continue
+		if _is_battle_peer_escaped(player.peer_id):
+			continue
+		if player.qi_xue > 0:
+			continue
+		player.shou_yuan = maxi(0, player.shou_yuan - BATTLE_HEAVY_WOUND_LIFE_LOSS)
+		if player.shou_yuan <= 0:
+			player.qi_xue = 0
+			battle_log.append(player.player_name + "被妖兽重创，寿元耗尽")
+		else:
+			player.qi_xue = maxi(1, int(round(float(_get_player_max_hp(player)) * BATTLE_HEAVY_WOUND_RECOVER_RATE)))
+			_mark_battle_peer_escaped(player.peer_id)
+			battle_log.append(player.player_name + "被妖兽重创，折寿" + str(BATTLE_HEAVY_WOUND_LIFE_LOSS) + "年，退出本次战斗")
+		changed = true
+	return changed
 
 
 func _enemy_attack_candidates(hurt_a: int, hurt_b: int, action_a: String, action_b: String, escaped_a: bool, escaped_b: bool) -> Array:
@@ -11529,6 +11716,13 @@ func settle_battle_action(peer_id: int, action: String) -> void:
 		battle_contributions[player_a.peer_id] = float(battle_contributions.get(player_a.peer_id, 0.0)) + float(enemy_damage_a)
 	if action_b != "脱离" and not escaped_b:
 		battle_contributions[player_b.peer_id] = float(battle_contributions.get(player_b.peer_id, 0.0)) + float(enemy_damage_b)
+	if _apply_battle_heavy_wounds():
+		if _try_trigger_lifespan_ending():
+			return
+		if _active_battle_player_count() <= 0 and int(current_enemy.get("hp", 0)) > 0:
+			battle_choices.clear()
+			handle_double_escape()
+			return
 	battle_choices.clear()
 
 	var update_data: Dictionary = _battle_state_data({
@@ -11557,11 +11751,7 @@ func settle_battle_action(peer_id: int, action: String) -> void:
 	if int(current_enemy.get("hp", 0)) <= 0:
 		distribute_loot()
 		return
-	if not _is_battle_peer_escaped(player_a.peer_id) and player_a.qi_xue <= 0:
-		handle_player_death(player_a)
-		return
-	if not _is_battle_peer_escaped(player_b.peer_id) and player_b.qi_xue <= 0:
-		handle_player_death(player_b)
+	if _try_trigger_lifespan_ending():
 		return
 	if single_player_mode and _is_battle_peer_escaped(player_a.peer_id) and not _is_battle_peer_escaped(player_b.peer_id):
 		_queue_npc_battle_action()
