@@ -2316,6 +2316,8 @@ func start_round() -> void:
 	check_set_bonus(player_b)
 	player_a.shou_yuan = maxi(0, player_a.shou_yuan - 1)
 	player_b.shou_yuan = maxi(0, player_b.shou_yuan - 1)
+	if _try_trigger_lifespan_ending():
+		return
 	_apply_round_identity_passives(player_a)
 	_apply_round_identity_passives(player_b)
 	player_a.final_attributes["last_round_cultivation"] = 0
@@ -10346,7 +10348,7 @@ func _apply_calamity(player: PlayerData, calamity: Dictionary, calamity_value: f
 			message = "遭遇敌人"
 		"shou_yuan_loss":
 			var years: int = int(round(value))
-			player.shou_yuan = max(1, player.shou_yuan - years)
+			player.shou_yuan = max(0, player.shou_yuan - years)
 			message = "寿元 -" + str(years)
 		"tribulation":
 			tribulation_triggered.emit(calamity)
@@ -12486,6 +12488,8 @@ func _try_trigger_death_ending() -> bool:
 		return true
 	if player_a == null or player_b == null:
 		return false
+	if _try_trigger_lifespan_ending():
+		return true
 	if player_a.qi_xue <= 0:
 		handle_player_death(player_a)
 		return true
@@ -12493,6 +12497,45 @@ func _try_trigger_death_ending() -> bool:
 		handle_player_death(player_b)
 		return true
 	return false
+
+
+func _try_trigger_lifespan_ending() -> bool:
+	if current_state == GameState.ENDING:
+		return true
+	if player_a == null or player_b == null:
+		return false
+	var player_a_dead: bool = player_a.shou_yuan <= 0
+	var player_b_dead: bool = player_b.shou_yuan <= 0
+	if not player_a_dead and not player_b_dead:
+		return false
+
+	player_a.shou_yuan = maxi(0, player_a.shou_yuan)
+	player_b.shou_yuan = maxi(0, player_b.shou_yuan)
+	var dead_player: PlayerData = player_a
+	var other_player: PlayerData = player_b
+	var result: Dictionary = {}
+	if player_a_dead and player_b_dead:
+		player_a.qi_xue = 0
+		player_b.qi_xue = 0
+		player_a.final_attributes["final_choice"] = "寿尽同陨"
+		player_b.final_attributes["final_choice"] = "寿尽同陨"
+		result["message"] = "二人寿元同尽，命火俱熄。仙路未至终局，道途已在此处合上。"
+	elif player_a_dead:
+		player_a.qi_xue = 0
+		player_a.final_attributes["final_choice"] = "寿元耗尽"
+		player_b.final_attributes["final_choice"] = "同修寿尽"
+		result["message"] = player_a.player_name + "寿元耗尽，命火熄灭。仙路未至终局，二人道途俱断。"
+	else:
+		dead_player = player_b
+		other_player = player_a
+		player_b.qi_xue = 0
+		player_b.final_attributes["final_choice"] = "寿元耗尽"
+		player_a.final_attributes["final_choice"] = "同修寿尽"
+		result["message"] = player_b.player_name + "寿元耗尽，命火熄灭。仙路未至终局，二人道途俱断。"
+	result["player_a"] = _player_snapshot(player_a)
+	result["player_b"] = _player_snapshot(player_b)
+	trigger_mutual_failure(dead_player, other_player, result)
+	return true
 
 
 func trigger_mutual_failure(dead_player: PlayerData, other_player: PlayerData, result: Dictionary = {}) -> void:
@@ -12893,6 +12936,12 @@ func _get_life_verdict(player: PlayerData, is_winner: bool) -> String:
 		return "你还活着，却没能把同修带到仙门前。道不同，终究也没能独行。"
 	if final_choice == "同途俱灭":
 		return "一场劫数吞没两条命数。你们没能走到反目的那一天。"
+	if final_choice == "寿元耗尽":
+		return "你一路争来许多机缘，却没争过命数。寿火烧尽，仙门仍远。"
+	if final_choice == "同修寿尽":
+		return "同修寿元耗尽，你也失去了继续独行的资格。仙路未绝，同行已断。"
+	if final_choice == "寿尽同陨":
+		return "两盏命火一同熄灭。天道没有再发下一张牌。"
 	if final_choice == "受让成仙":
 		return "你本已败在仙门之前，却得故人一念相让。飞升之路从此多了一道还不清的人情。"
 	if final_choice == "放弃仙位":
@@ -12921,6 +12970,8 @@ func _get_life_title(player: PlayerData) -> String:
 	var titles: Array[String] = []
 	if final_choice in ["中道陨落", "同修陨落", "同途俱灭"]:
 		titles.append("道途俱断")
+	elif final_choice in ["寿元耗尽", "同修寿尽", "寿尽同陨"]:
+		titles.append("寿尽道消")
 	elif final_choice == "放弃仙位":
 		titles.append("让仙者")
 	elif final_choice == "受让成仙":
@@ -12962,6 +13013,12 @@ func _get_opponent_summary(opponent_title: String, opponent: PlayerData = null) 
 			return "你倒下之后，他也失去了继续问道的资格。"
 		if final_choice == "同途俱灭":
 			return "你们同陷一劫，仙路在那一刻合上。"
+		if final_choice == "寿元耗尽":
+			return "他寿元耗尽，没能等到仙门开启。"
+		if final_choice == "同修寿尽":
+			return "你寿元耗尽之后，他也失去了继续问道的资格。"
+		if final_choice == "寿尽同陨":
+			return "你们寿元同尽，命火在同一刻熄灭。"
 		if final_choice == "放弃仙位":
 			return "他胜过最后一局，却在仙门前停步，将飞升之位让给了你。"
 		if final_choice == "受让成仙":
@@ -12989,6 +13046,12 @@ func _get_final_choice_desc(player: PlayerData, is_winner: bool) -> String:
 			return "同修先你一步陨落，你虽未死，却也失去了继续独行的资格。"
 		"同途俱灭":
 			return "你们同陷死劫，没能走到最后翻脸争仙的那一步。"
+		"寿元耗尽":
+			return "你寿元耗尽，命火熄灭，未能等到仙门开启。"
+		"同修寿尽":
+			return "同修寿元耗尽，你虽未先倒，却也失去了继续独行的资格。"
+		"寿尽同陨":
+			return "你们寿元同尽，两盏命火一起熄灭。"
 		"踏入仙门":
 			return "最后一战既胜，你没有回头，踏入仙门。"
 		"放弃仙位":
@@ -13172,6 +13235,12 @@ func _story_aftertaste(player: PlayerData, is_winner: bool) -> String:
 		return " 你倒下时，最后看见的不是仙门，而是同修仍在伸手。"
 	if final_choice == "同途俱灭":
 		return " 两道命火一同熄灭，连最后反目的机会也被天道夺走。"
+	if final_choice == "寿元耗尽":
+		return " 最后一息散尽时，你听见的不是战鼓，而是岁月合账的声音。"
+	if final_choice == "同修寿尽":
+		return " 你还剩半口气，却知道少了同修，这条仙路已走不下去。"
+	if final_choice == "寿尽同陨":
+		return " 两盏命灯同时暗下，未翻开的机缘也随风散去。"
 	if is_winner:
 		if ghost_count > 0:
 			return " 飞升那一刻，幡中诸魂没有散去，反而随你一同望向更高处。"
